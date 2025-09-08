@@ -74,9 +74,9 @@ function onPick(e) {
   }
 
   // 2) tamaño (≤10MB)
-  const TEN_MB = 10 * 1024 * 1024;
-  if (f.size > TEN_MB) {
-    errorMsg.value = "El archivo supera el límite de 10MB.";
+  const MAX_20_MB = 20 * 1024 * 1024;
+  if (f.size > MAX_20_MB) {
+    errorMsg.value = "El archivo supera el límite de 20MB.";
     return;
   }
 
