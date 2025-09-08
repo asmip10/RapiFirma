@@ -139,7 +139,7 @@ namespace RapiFirma.Domain.Entities
         public DateTime? FechaFirma { get; private set; }
 
         /// <summary>
-        /// Datos binarios del PDF (máximo 10MB).
+        /// Datos binarios del PDF (máximo 20MB).
         /// </summary>
         [Required]
         public byte[] PdfData { get; private set; }
@@ -186,8 +186,8 @@ namespace RapiFirma.Domain.Entities
             if (string.IsNullOrWhiteSpace(nombrePdf))
                 throw new ArgumentException("El nombre del PDF es requerido.");
 
-            if (pdfData == null || pdfData.Length == 0 || pdfData.Length > 10 * 1024 * 1024)
-                throw new ArgumentException("El PDF es requerido y debe ser menor a 10MB.");
+            if (pdfData == null || pdfData.Length == 0 || pdfData.Length > 20 * 1024 * 1024)
+                throw new ArgumentException("El PDF es requerido y debe ser menor a 20MB.");
 
             if (estado != "pendiente" && estado != "firmado")
                 throw new ArgumentException("El estado debe ser 'pendiente' o 'firmado'.");
@@ -225,8 +225,8 @@ namespace RapiFirma.Domain.Entities
         /// <exception cref="ArgumentException">Si los datos son inválidos.</exception>
         public void UpdatePdfData(byte[] newPdfData)
         {
-            if (newPdfData == null || newPdfData.Length == 0 || newPdfData.Length > 10 * 1024 * 1024)
-                throw new ArgumentException("Los datos del PDF son inválidos o superan los 10MB.");
+            if (newPdfData == null || newPdfData.Length == 0 || newPdfData.Length > 20 * 1024 * 1024)
+                throw new ArgumentException("Los datos del PDF son inválidos o superan los 20MB.");
             PdfData = newPdfData;
         }
 
@@ -1069,7 +1069,7 @@ namespace RapiFirma.Application.Services
                 throw new InvalidOperationException("El documento no está pendiente.");
 
             if (signedPdfData == null || signedPdfData.Length == 0 || signedPdfData.Length > 20 * 1024 * 1024)
-                throw new ArgumentException("Los datos del PDF firmado son inválidos o superan los 10MB.");
+                throw new ArgumentException("Los datos del PDF firmado son inválidos o superan los 20MB.");
 
             document.UpdatePdfData(signedPdfData);
             document.Sign();
@@ -1108,7 +1108,7 @@ namespace RapiFirma.Application.Services
                 throw new ArgumentException("Documento no encontrado o eliminado.");
 
             if (signedPdfData == null || signedPdfData.Length == 0 || signedPdfData.Length > 20 * 1024 * 1024)
-                throw new ArgumentException("Los datos del PDF firmado son inválidos o superan los 10MB.");
+                throw new ArgumentException("Los datos del PDF firmado son inválidos o superan los 20MB.");
 
             document.UpdatePdfData(signedPdfData);
             return await _documentRepository.UpdateAsync(document);
