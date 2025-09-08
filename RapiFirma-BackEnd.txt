@@ -1,0 +1,3217 @@
+RapiFirma/
+├── RapiFirma.sln                # Solución principal
+├── src/
+│   ├── RapiFirma/               # Proyecto principal ASP.NET Core
+│   │   ├── Controllers/         # Controladores API (e.g., AuthController, DocumentController)
+│   │   ├── Middleware/          # Middleware personalizado (e.g., JWT validation)
+│   │   ├── Program.cs           # Punto de entrada de la aplicación
+│   │   ├── appsettings.json     # Configuración (connection strings, JWT settings)
+│   │   ├── wwwroot/             # Archivos estáticos (si aplica)
+│   │   ├── Domain/              # Capa de dominio (entidades y lógica de negocio)
+│   │   │   ├── Entities/        # Entidades (e.g., User, Document, Role)
+│   │   │   ├── Interfaces/      # Interfaces de servicios y repositorios
+│   │   │   └── ValueObjects/    # Objetos de valor (si se usan)
+│   │   ├── Application/         # Capa de aplicación (casos de uso y servicios)
+│   │   │   ├── Services/        # Implementaciones de servicios (e.g., DocumentService)
+│   │   │   ├── DTOs/            # Objetos de transferencia de datos
+│   │   │   └── Interfaces/      # Interfaces de servicios
+│   │   ├── Infrastructure/      # Capa de infraestructura (implementaciones concretas)
+│   │   │   ├── Persistence/     # Contexto EF Core y repositorios (e.g., RapiFirmaDbContext)
+│   │   │   ├── Authentication/  # Gestión de JWT
+│   │   │   ├── Jobs/            # Jobs de Hangfire (e.g., limpieza de PDFs)
+│   │   │   └── External/        # Adaptadores externos (si aplica)
+│   │   └── Tests/               # Pruebas unitarias (opcional)
+│   │       ├── UnitTests/       # Pruebas para servicios y lógica
+│   │       └── IntegrationTests/# Pruebas de integración
+├── .gitignore                   # Ignorar archivos generados
+└── README.md                    # Documentación del proyecto
+
+
+
+/Domain/Entities
+
+namespace RapiFirma.Domain.Entities
+{
+    using System.ComponentModel.DataAnnotations;
+
+    /// <summary>
+    /// Representa un cargo disponible en el sistema, asociado a los usuarios.
+    /// </summary>
+    public class Cargo
+    {
+        /// <summary>
+        /// Identificador único del cargo.
+        /// </summary>
+        public int Id { get; private set; }
+
+        /// <summary>
+        /// Nombre del cargo, único y requerido.
+        /// </summary>
+        [Required]
+        public string NombreCargo { get; private set; }
+
+        /// <summary>
+        /// Indicador de eliminación lógica, default false.
+        /// </summary>
+        public bool IsDeleted { get; private set; }
+
+        /// <summary>
+        /// Inicializa una nueva instancia de Cargo con validaciones.
+        /// </summary>
+        /// <param name="nombreCargo">Nombre del cargo.</param>
+        /// <exception cref="ArgumentException">Si el nombre es inválido.</exception>
+        public Cargo(string nombreCargo)
+        {
+            if (string.IsNullOrWhiteSpace(nombreCargo))
+                throw new ArgumentException("El nombre del cargo es requerido.");
+            NombreCargo = nombreCargo;
+            IsDeleted = false;
+        }
+
+        private Cargo()
+        {
+            // Constructor privado para EF Core
+        }
+        public void SoftDelete()
+        {
+            IsDeleted = true;
+        }
+    }
+}
+
+namespace RapiFirma.Domain.Entities
+{
+    using System;
+    using System.ComponentModel.DataAnnotations;
+
+    /// <summary>
+    /// Representa un documento PDF en el sistema con su estado y metadatos.
+    /// </summary>
+    public class Document
+    {
+        /// <summary>
+        /// Identificador único del documento.
+        /// </summary>
+        public int Id { get; private set; }
+
+        /// <summary>
+        /// Nombre del archivo PDF.
+        /// </summary>
+        [Required]
+        public string NombrePDF { get; private set; }
+
+        /// <summary>
+        /// Identificador del remitente original.
+        /// </summary>
+        [Required]
+        public int RemitenteID { get; private set; }
+
+        /// <summary>
+        /// Identificador del destinatario actual.
+        /// </summary>
+        [Required]
+        public int DestinatarioID { get; private set; }
+
+        /// <summary>
+        /// Identificador del usuario que realizó el reenvío (nullable).
+        /// </summary>
+        public int? ReenviadoPorID { get; private set; }
+
+        /// <summary>
+        /// Estado del documento ("pendiente" o "firmado").
+        /// </summary>
+        [Required]
+        public string Estado { get; private set; }
+
+        /// <summary>
+        /// Fecha de envío del documento.
+        /// </summary>
+        public DateTime FechaEnvio { get; private set; }
+
+        /// <summary>
+        /// Fecha de reenvío del documento (nullable).
+        /// </summary>
+        public DateTime? FechaReenvio { get; private set; }
+
+        /// <summary>
+        /// Fecha de firma del documento (nullable).
+        /// </summary>
+        public DateTime? FechaFirma { get; private set; }
+
+        /// <summary>
+        /// Datos binarios del PDF (máximo 10MB).
+        /// </summary>
+        [Required]
+        public byte[] PdfData { get; private set; }
+
+        /// <summary>
+        /// Fecha de expiración del documento (FechaEnvio + 3 meses).
+        /// </summary>
+        public DateTime FechaExpiracion { get; private set; }
+
+        /// <summary>
+        /// Indicador de eliminación lógica, default false.
+        /// </summary>
+        public bool IsDeleted { get; private set; }
+
+        /// <summary>
+        /// Remitente original del documento.
+        /// </summary>
+        public virtual User Remitente { get; private set; }
+
+        /// <summary>
+        /// Destinatario actual del documento.
+        /// </summary>
+        public virtual User Destinatario { get; private set; }
+
+        /// <summary>
+        /// Usuario que realizó el reenvío (si aplica).
+        /// </summary>
+        public virtual User ReenviadoPor { get; private set; }
+
+        /// <summary>
+        /// Inicializa una nueva instancia de Document con validaciones y parámetros personalizados.
+        /// </summary>
+        /// <param name="nombrePdf">Nombre del archivo PDF.</param>
+        /// <param name="remitenteId">Identificador del remitente original.</param>
+        /// <param name="destinatarioId">Identificador del destinatario.</param>
+        /// <param name="pdfData">Datos binarios del PDF.</param>
+        /// <param name="estado">Estado inicial del documento.</param>
+        /// <param name="fechaEnvio">Fecha de envío (opcional, usa UTC ahora por defecto).</param>
+        /// <param name="reenviadoPorId">Identificador del usuario que reenvía (nullable).</param>
+        /// <param name="fechaReenvio">Fecha de reenvío (nullable).</param>
+        /// <exception cref="ArgumentException">Si las validaciones fallan.</exception>
+        public Document(string nombrePdf, int remitenteId, int destinatarioId, byte[] pdfData, string estado = "pendiente", DateTime? fechaEnvio = null, int? reenviadoPorId = null, DateTime? fechaReenvio = null)
+        {
+            if (string.IsNullOrWhiteSpace(nombrePdf))
+                throw new ArgumentException("El nombre del PDF es requerido.");
+
+            if (pdfData == null || pdfData.Length == 0 || pdfData.Length > 10 * 1024 * 1024)
+                throw new ArgumentException("El PDF es requerido y debe ser menor a 10MB.");
+
+            if (estado != "pendiente" && estado != "firmado")
+                throw new ArgumentException("El estado debe ser 'pendiente' o 'firmado'.");
+
+            NombrePDF = nombrePdf;
+            RemitenteID = remitenteId;
+            DestinatarioID = destinatarioId;
+            ReenviadoPorID = reenviadoPorId;
+            Estado = estado;
+            PdfData = pdfData;
+            FechaEnvio = fechaEnvio ?? DateTime.UtcNow;
+            FechaReenvio = fechaReenvio;
+            FechaExpiracion = FechaEnvio.AddDays(40);
+            IsDeleted = false;
+        }
+
+        private Document() { }
+
+        /// <summary>
+        /// Firma el documento, cambiando su estado a "firmado" si está pendiente.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Si el documento no está pendiente.</exception>
+        public void Sign()
+        {
+            if (Estado != "pendiente")
+                throw new InvalidOperationException("Solo se puede firmar un documento pendiente.");
+            Estado = "firmado";
+            FechaFirma = DateTime.UtcNow;
+        }
+
+        /// <summary>
+        /// Actualiza los datos binarios del PDF con nuevas validaciones.
+        /// </summary>
+        /// <param name="newPdfData">Nuevos datos binarios del PDF.</param>
+        /// <exception cref="ArgumentException">Si los datos son inválidos.</exception>
+        public void UpdatePdfData(byte[] newPdfData)
+        {
+            if (newPdfData == null || newPdfData.Length == 0 || newPdfData.Length > 10 * 1024 * 1024)
+                throw new ArgumentException("Los datos del PDF son inválidos o superan los 10MB.");
+            PdfData = newPdfData;
+        }
+
+        /// <summary>
+        /// Marca el documento como eliminado lógicamente.
+        /// </summary>
+        public void SoftDelete()
+        {
+            IsDeleted = true;
+        }
+
+        /// <summary>
+        /// Restaura el documento activándolo (IsDeleted = false).
+        /// </summary>
+        public void Restore()
+        {
+            if (!IsDeleted)
+                throw new InvalidOperationException("El documento ya está activo.");
+            IsDeleted = false;
+        }
+    }
+}
+
+
+namespace RapiFirma.Domain.Entities
+{
+    using System.ComponentModel.DataAnnotations;
+
+    /// <summary>
+    /// Representa un rol fijo en el sistema, con valores "Admin" o "User".
+    /// </summary>
+    public class Rol
+    {
+        /// <summary>
+        /// Identificador único del rol.
+        /// </summary>
+        public int Id { get; private set; }
+
+        /// <summary>
+        /// Nombre del rol, único y con valores fijos "Admin" o "User".
+        /// </summary>
+        [Required]
+        public string Nombre { get; private set; }
+
+        /// <summary>
+        /// Indicador de eliminación lógica, default false (no se usará en práctica).
+        /// </summary>
+        public bool IsDeleted { get; private set; }
+
+        /// <summary>
+        /// Inicializa una nueva instancia de Rol con validaciones.
+        /// </summary>
+        /// <param name="nombre">Nombre del rol ("Admin" o "User").</param>
+        /// <exception cref="ArgumentException">Si el nombre no es válido.</exception>
+        public Rol(string nombre)
+        {
+            if (string.IsNullOrWhiteSpace(nombre) || (nombre != "Admin" && nombre != "User"))
+                throw new ArgumentException("El nombre del rol debe ser 'Admin' o 'User'.");
+            Nombre = nombre;
+            IsDeleted = false;
+        }
+
+        private Rol()
+        {
+            // Constructor privado para EF Core
+            IsDeleted = false;
+        }
+
+        /// <summary>
+        /// Marca el rol como eliminado lógicamente.
+        /// </summary>
+        public void SoftDelete()
+        {
+            IsDeleted = true;
+        }
+    }
+}
+
+namespace RapiFirma.Domain.Entities
+{
+    using System;
+    using System.Collections.Generic;
+    using System.ComponentModel.DataAnnotations;
+    using System.Linq;
+
+    /// <summary>
+    /// Representa un usuario del sistema con su información personal, rol, cargo y documentos asociados.
+    /// </summary>
+    public class User
+    {
+        /// <summary>
+        /// Identificador único del usuario.
+        /// </summary>
+        public int Id { get; private set; }
+
+        /// <summary>
+        /// Número de DNI, debe ser de 8 dígitos numéricos y único.
+        /// </summary>
+        [Required]
+        public string Dni { get; private set; }
+
+        /// <summary>
+        /// Nombres del usuario, requerido.
+        /// </summary>
+        [Required]
+        public string Nombres { get; private set; }
+
+        /// <summary>
+        /// Apellidos del usuario, requerido.
+        /// </summary>
+        [Required]
+        public string Apellidos { get; private set; }
+
+        /// <summary>
+        /// Nombre de usuario generado como primer nombre + iniciales de apellidos, único.
+        /// </summary>
+        [Required]
+        public string Username { get; set; }
+
+        /// <summary>
+        /// Identificador del cargo asociado (nullable).
+        /// </summary>
+        public int? CargoId { get; private set; }
+
+        /// <summary>
+        /// Identificador del rol asociado, no nullable.
+        /// </summary>
+        [Required]
+        public int RolId { get; private set; }
+
+        /// <summary>
+        /// Tipo de usuario (Funcionario o Normal) si el rol es User, nullable.
+        /// </summary>
+        public string? Tipo { get; private set; }
+
+        /// <summary>
+        /// Indicador de eliminación lógica, default false.
+        /// </summary>
+        public bool IsDeleted { get; private set; }
+
+        /// <summary>
+        /// Documentos enviados por este usuario.
+        /// </summary>
+        public virtual ICollection<Document> DocumentsEnviados { get; private set; }
+
+        /// <summary>
+        /// Documentos recibidos por este usuario.
+        /// </summary>
+        public virtual ICollection<Document> DocumentsRecibidos { get; private set; }
+
+        /// <summary>
+        /// Cargo asociado al usuario.
+        /// </summary>
+        public virtual Cargo Cargo { get; private set; }
+
+        /// <summary>
+        /// Rol asociado al usuario.
+        /// </summary>
+        public virtual Rol Rol { get; private set; }
+
+        /// <summary>
+        /// Inicializa una nueva instancia de User con validaciones.
+        /// </summary>
+        /// <param name="dni">DNI de 8 dígitos.</param>
+        /// <param name="nombres">Nombres del usuario.</param>
+        /// <param name="apellidos">Apellidos del usuario.</param>
+        /// <param name="cargoId">Identificador del cargo (nullable).</param>
+        /// <param name="rolId">Identificador del rol.</param>
+        /// <param name="tipo">Tipo de usuario (nullable, solo para rol User).</param>
+        /// <exception cref="ArgumentException">Si las validaciones fallan.</exception>
+        public User(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null)
+        {
+            // Validar DNI
+            if (string.IsNullOrWhiteSpace(dni) || dni.Length != 8 || !int.TryParse(dni, out _))
+                throw new ArgumentException("El DNI debe ser un número de 8 dígitos.");
+
+            // Validar nombres y apellidos
+            if (string.IsNullOrWhiteSpace(nombres) || string.IsNullOrWhiteSpace(apellidos))
+                throw new ArgumentException("Nombres y apellidos son requeridos.");
+
+            // Generar username
+            Username = GenerateUsername(nombres, apellidos);
+
+            // Asignar valores
+            Dni = dni;
+            Nombres = nombres;
+            Apellidos = apellidos;
+            CargoId = cargoId;
+            RolId = rolId;
+            Tipo = ValidateAndSetTipo(rolId, tipo);
+            IsDeleted = false;
+            DocumentsEnviados = new List<Document>();
+            DocumentsRecibidos = new List<Document>();
+        }
+
+        private User()
+        {
+            // Constructor por defecto para EF Core
+            DocumentsEnviados = new List<Document>();
+            DocumentsRecibidos = new List<Document>();
+        }
+
+        /// <summary>
+        /// Genera el username a partir del nombre y apellidos.
+        /// </summary>
+        private string GenerateUsername(string nombres, string apellidos)
+        {
+            var nameParts = nombres.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var apellidoParts = apellidos.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var firstName = nameParts[0];
+            var initials = string.Join("", apellidoParts.Select(a => a[0]));
+            return $"{firstName}{initials}".ToLower();
+        }
+
+        /// <summary>
+        /// Valida y establece el tipo de usuario según el rol.
+        /// </summary>
+        private string? ValidateAndSetTipo(int rolId, string tipo)
+        {
+            // Suponemos que RolId=1 es Admin y RolId=2 es User
+            if (rolId == 2 && !string.IsNullOrWhiteSpace(tipo))
+            {
+                if (tipo != "Funcionario" && tipo != "Normal")
+                    throw new ArgumentException("El tipo debe ser 'Funcionario' o 'Normal' para rol User.");
+                return tipo;
+            }
+            return null; // No aplica para Admin
+        }
+
+        /// <summary>
+        /// Verifica si el usuario puede eliminar documentos (todos los Users pueden).
+        /// </summary>
+        public bool CanDeleteDocuments()
+        {
+            return Rol?.Nombre == "User"; // Todos los Users (Funcionario o Normal) pueden eliminar
+        }
+
+        /// <summary>
+        /// Marca el usuario como eliminado lógicamente.
+        /// </summary>
+        public void SoftDelete()
+        {
+            IsDeleted = true;
+        }
+
+        /// <summary>
+        /// Actualiza las propiedades del usuario con validaciones y regenera Username.
+        /// </summary>
+        /// <param name="dni">Nuevo DNI (password).</param>
+        /// <param name="nombres">Nuevos nombres.</param>
+        /// <param name="apellidos">Nuevos apellidos.</param>
+        /// <param name="cargoId">Nuevo cargo ID (nullable).</param>
+        /// <param name="rolId">Nuevo rol ID.</param>
+        /// <param name="tipo">Nuevo tipo (Funcionario/Normal para rol User).</param>
+        public void Update(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null, string newUsername = null)
+        {
+            // Validar DNI
+            if (string.IsNullOrWhiteSpace(dni) || dni.Length != 8 || !int.TryParse(dni, out _))
+                throw new ArgumentException("El DNI debe ser un número de 8 dígitos.");
+
+            // Validar nombres y apellidos
+            if (string.IsNullOrWhiteSpace(nombres) || string.IsNullOrWhiteSpace(apellidos))
+                throw new ArgumentException("Nombres y apellidos son requeridos.");
+
+            Dni = dni;
+            Nombres = nombres;
+            Apellidos = apellidos;
+            CargoId = cargoId;
+            RolId = rolId;
+            Tipo = ValidateAndSetTipo(rolId, tipo);
+
+            // Regenera username si no se proporciona uno nuevo
+            if (string.IsNullOrWhiteSpace(newUsername))
+            {
+                Username = GenerateUsername(nombres, apellidos);
+            }
+            else
+            {
+                Username = newUsername.ToLower();  // Normaliza a minúsculas
+            }
+        }
+
+        /// <summary>
+        /// Restaura el usuario activándolo (IsDeleted = false).
+        /// </summary>
+        public void Restore()
+        {
+            if (!IsDeleted)
+                throw new InvalidOperationException("El usuario ya está activo.");
+            IsDeleted = false;
+        }
+
+    }
+}
+
+/Domain/Interfaces
+
+namespace RapiFirma.Domain.Interfaces
+{
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Define un contrato para operaciones de autenticación en el sistema.
+    /// </summary>
+    public interface IAuthenticationService
+    {
+        /// <summary>
+        /// Inicia sesión con las credenciales del usuario y genera un JWT.
+        /// </summary>
+        /// <param name="username">Nombre de usuario.</param>
+        /// <param name="password">Contraseña (DNI).</param>
+        /// <returns>El token JWT generado o null si falla.</returns>
+        /// <exception cref="ArgumentException">Si las credenciales son inválidas.</exception>
+        Task<string> LoginAsync(string username, string password);
+
+        /// <summary>
+        /// Valida un token JWT.
+        /// </summary>
+        /// <param name="token">Token a validar.</param>
+        /// <returns>True si el token es válido, false de lo contrario.</returns>
+        Task<bool> ValidateTokenAsync(string token);
+    }
+}
+
+
+
+namespace RapiFirma.Domain.Interfaces
+{
+    using RapiFirma.Domain.Entities;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Define un contrato para operaciones específicas del repositorio de cargos.
+    /// </summary>
+    public interface ICargoRepository : IRepository<Cargo>
+    {
+        /// <summary>
+        /// Obtiene una colección de todos los cargos disponibles en el sistema.
+        /// </summary>
+        /// <returns>Una colección de cargos activos (IsDeleted = false).</returns>
+        Task<IEnumerable<Cargo>> GetAllAsync();
+    }
+}
+
+namespace RapiFirma.Domain.Interfaces
+{
+    using RapiFirma.Domain.Entities;
+    using System;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Define un contrato para operaciones específicas del repositorio de documentos.
+    /// </summary>
+    public interface IDocumentRepository : IRepository<Document>
+    {
+        /// <summary>
+        /// Obtiene una colección de documentos asociados a un usuario con filtros aplicados.
+        /// </summary>
+        /// <param name="userId">Identificador del usuario.</param>
+        /// <param name="received">Indica si se deben obtener documentos recibidos (true) o enviados (false).</param>
+        /// <param name="nombrePdf">Filtro opcional por nombre del PDF (contiene).</param>
+        /// <param name="estado">Filtro opcional por estado ("pendiente" o "firmado").</param>
+        /// <param name="fechaInicio">Filtro opcional para el rango de fecha de inicio (FechaEnvio o FechaFirma).</param>
+        /// <param name="fechaFin">Filtro opcional para el rango de fecha de fin.</param>
+        /// <param name="includeDeleted">Si true, incluye documentos con IsDeleted=true; default false.</param>
+        /// <returns>Una colección de documentos que cumplen con los criterios.</returns>
+        /// <exception cref="ArgumentException">Si el userId es inválido.</exception>
+        Task<IEnumerable<Document>> GetByUserAsync(int userId, bool received, string nombrePdf = null, string estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, bool includeDeleted = false);
+
+
+        /// <summary>
+        /// Elimina permanentemente un documento de la base de datos.
+        /// </summary>
+        /// <param name="id">Identificador del documento a eliminar.</param>
+        Task HardDeleteAsync(int id);
+
+        // Nuevo método para listar todos los documentos
+        Task<IEnumerable<Document>> GetAllAsync(string nombrePdf = null, string estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, bool includeDeleted = false);
+    }
+}
+
+
+namespace RapiFirma.Domain.Interfaces
+{
+    using RapiFirma.Application.DTOs;
+    using RapiFirma.Domain.Entities;
+    using System;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+    /// <summary>
+    /// Define un contrato para operaciones de servicio relacionadas con documentos.
+    /// </summary>
+    public interface IDocumentService
+    {
+        /// <summary>
+        /// Sube un nuevo documento con validación de límite (≤4 por usuario).
+        /// </summary>
+        /// <param name="nombrePdf">Nombre del archivo PDF.</param>
+        /// <param name="destinatarioId">Identificador del destinatario.</param>
+        /// <param name="pdfData">Datos binarios del PDF.</param>
+        /// <returns>El documento creado.</returns>
+        /// <exception cref="ArgumentException">Si las validaciones fallan.</exception>
+        Task<Document> UploadDocumentAsync(string nombrePdf, int destinatarioId, byte[] pdfData);
+
+        /// <summary>
+        /// Firma un documento, cambiando su estado a "firmado" si está pendiente y actualizando el PdfData con el nuevo PDF firmado.
+        /// </summary>
+        /// <param name="documentId">Identificador del documento.</param>
+        /// <param name="signedPdfData">Datos binarios del PDF firmado (generado por Firma ONPE).</param>
+        /// <returns>El documento firmado.</returns>
+        /// <exception cref="InvalidOperationException">Si el documento no está pendiente.</exception>
+        Task<Document> SignDocumentAsync(int documentId, byte[] signedPdfData);
+
+        /// <summary>
+        /// Reenvía un documento a otro usuario, creando un nuevo documento con estado "pendiente" y copia del PdfData.
+        /// </summary>
+        /// <param name="documentId">Identificador del documento a reenviar.</param>
+        /// <param name="newRecipientId">Identificador del nuevo destinatario.</param>
+        /// <returns>El nuevo documento creado.</returns>
+        /// <exception cref="ArgumentException">Si el destinatario es inválido.</exception>
+        Task<Document> SendDocumentAsync(int documentId, int newRecipientId);
+
+        /// <summary>
+        /// Actualiza un documento con el PDF firmado subido por el usuario.
+        /// </summary>
+        /// <param name="documentId">Identificador del documento.</param>
+        /// <param name="signedPdfData">Datos binarios del PDF firmado.</param>
+        /// <returns>El documento actualizado.</returns>
+        /// <exception cref="ArgumentException">Si los datos son inválidos.</exception>
+        Task<Document> UpdateSignedDocumentAsync(int documentId, byte[] signedPdfData);
+
+        /// <summary>
+        /// Descarga los datos binarios de un documento.
+        /// </summary>
+        /// <param name="documentId">Identificador del documento.</param>
+        /// <returns>Datos binarios del PDF.</returns>
+        /// <exception cref="KeyNotFoundException">Si el documento no existe.</exception>
+        Task<byte[]> DownloadDocumentAsync(int documentId);
+
+        /// <summary>
+        /// Obtiene documentos asociados a un usuario con filtros aplicados.
+        /// </summary>
+        /// <param name="userId">Identificador del usuario.</param>
+        /// <param name="received">Indica si se obtienen recibidos (true) o enviados (false).</param>
+        /// <param name="nombrePdf">Filtro opcional por nombre del PDF.</param>
+        /// <param name="estado">Filtro opcional por estado.</param>
+        /// <param name="fechaInicio">Filtro opcional para rango de fecha de inicio.</param>
+        /// <param name="fechaFin">Filtro opcional para rango de fecha de fin.</param>
+        /// <returns>Una colección de documentos filtrados.</returns>
+        /// <exception cref="ArgumentException">Si el userId es inválido.</exception>
+        Task<IEnumerable<Document>> GetDocumentsByUserAsync(int userId, bool received, string nombrePdf = null, string estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null);
+
+        /// <summary>
+        /// Marca un documento como eliminado lógicamente (soft delete).
+        /// </summary>
+        /// <param name="documentId">Identificador del documento.</param>
+        /// <returns>Una tarea que representa la operación asíncrona.</returns>
+        /// <exception cref="ArgumentException">Si el documentId es inválido.</exception>
+        Task DeleteDocumentAsync(int documentId);
+
+        /// <summary>
+        /// Obtiene un documento por su identificador único.
+        /// </summary>
+        /// <param name="documentId">Identificador del documento.</param>
+        /// <returns>El documento encontrado o null si no existe.</returns>
+        /// <exception cref="ArgumentException">Si el documentId es inválido.</exception>
+        Task<Document> GetByIdAsync(int documentId);
+
+        // Nuevo método para listar todos los documentos
+        Task<IEnumerable<DocumentDto>> GetAllDocumentsAsync(string nombrePdf = null, string estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, bool includeDeleted = false);
+            
+    }
+}
+
+namespace RapiFirma.Domain.Interfaces
+{
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Define un contrato genérico para operaciones CRUD asíncronas en una entidad.
+    /// </summary>
+    /// <typeparam name="T">Tipo de la entidad, debe ser una clase.</typeparam>
+    public interface IRepository<T> where T : class
+    {
+        /// <summary>
+        /// Obtiene una entidad por su identificador único.
+        /// </summary>
+        /// <param name="id">Identificador de la entidad.</param>
+        /// <returns>La entidad encontrada o null si no existe.</returns>
+        /// <exception cref="ArgumentException">Si el id es inválido.</exception>
+        Task<T> GetByIdAsync(int id);
+
+        /// <summary>
+        /// Obtiene todas las entidades de un tipo específico.
+        /// </summary>
+        /// <returns>Una colección de todas las entidades.</returns>
+        Task<IEnumerable<T>> GetAllAsync();
+
+        /// <summary>
+        /// Agrega una nueva entidad al repositorio.
+        /// </summary>
+        /// <param name="entity">La entidad a agregar.</param>
+        /// <returns>La entidad agregada con su identificador asignado.</returns>
+        /// <exception cref="ArgumentNullException">Si la entidad es null.</exception>
+        Task<T> AddAsync(T entity);
+
+        /// <summary>
+        /// Actualiza una entidad existente en el repositorio.
+        /// </summary>
+        /// <param name="entity">La entidad a actualizar.</param>
+        /// <returns>La entidad actualizada.</returns>
+        /// <exception cref="ArgumentNullException">Si la entidad es null.</exception>
+        /// <exception cref="KeyNotFoundException">Si la entidad no existe.</exception>
+        Task<T> UpdateAsync(T entity);
+
+        /// <summary>
+        /// Marca una entidad como eliminada lógicamente (soft delete).
+        /// </summary>
+        /// <param name="id">Identificador de la entidad a eliminar.</param>
+        /// <returns>Una tarea que representa la operación asíncrona.</returns>
+        /// <exception cref="ArgumentException">Si el id es inválido.</exception>
+        /// <exception cref="KeyNotFoundException">Si la entidad no existe.</exception>
+        Task DeleteAsync(int id);
+    }
+}
+
+
+namespace RapiFirma.Domain.Interfaces
+{
+    using RapiFirma.Domain.Entities;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Define un contrato para operaciones específicas del repositorio de roles.
+    /// </summary>
+    public interface IRolRepository : IRepository<Rol>
+    {
+        /// <summary>
+        /// Obtiene una colección de todos los roles disponibles en el sistema.
+        /// </summary>
+        /// <returns>Una colección de roles activos (IsDeleted = false).</returns>
+        Task<IEnumerable<Rol>> GetAllAsync();
+    }
+}
+
+
+namespace RapiFirma.Domain.Interfaces
+{
+    using RapiFirma.Domain.Entities;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Define un contrato para operaciones específicas del repositorio de usuarios.
+    /// </summary>
+    public interface IUserRepository : IRepository<User>
+    {
+        /// <summary>
+        /// Obtiene un usuario por su DNI.
+        /// </summary>
+        /// <param name="dni">DNI del usuario a buscar.</param>
+        /// <returns>El usuario encontrado o null si no existe.</returns>
+        Task<User> GetByDniAsync(string dni);
+
+        /// <summary>
+        /// Obtiene un usuario por su username.
+        /// </summary>
+        /// <param name="username">Nombre de usuario a buscar.</param>
+        /// <returns>El usuario encontrado o null si no existe.</returns>
+        Task<User> GetByUsernameAsync(string username);
+
+        /// <summary>
+        /// Obtiene una colección de usuarios por su rol.
+        /// </summary>
+        /// <param name="roleId">Identificador del rol.</param>
+        /// <returns>Una colección de usuarios con el rol especificado.</returns>
+        Task<IEnumerable<User>> GetByRoleAsync(int roleId);
+        Task<IEnumerable<User>> GetAllAsync(bool includeDeleted = false);
+
+        Task HardDeleteAsync(int id);
+
+        /// <summary>
+        /// Obtiene un usuario por su identificador único.
+        /// </summary>
+        /// <param name="id">Identificador del usuario.</param>
+        /// <param name="includeDeleted">Si true, incluye usuarios con IsDeleted=true; default false.</param>
+        /// <returns>El usuario encontrado o null si no existe.</returns>
+        Task<User> GetByIdAsync(int id, bool includeDeleted = false);
+    }
+}
+
+
+namespace RapiFirma.Domain.Interfaces
+{
+    using RapiFirma.Domain.Entities;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Define un contrato para operaciones de servicio relacionadas con usuarios.
+    /// </summary>
+    public interface IUserService
+    {
+        /// <summary>
+        /// Crea un nuevo usuario con las propiedades especificadas.
+        /// </summary>
+        /// <param name="dni">DNI de 8 dígitos del usuario (usado como password).</param>
+        /// <param name="nombres">Nombres del usuario.</param>
+        /// <param name="apellidos">Apellidos del usuario.</param>
+        /// <param name="cargoId">Identificador del cargo (nullable).</param>
+        /// <param name="rolId">Identificador del rol.</param>
+        /// <param name="tipo">Tipo de usuario (nullable, "Funcionario" o "Normal" para rol User).</param>
+        /// <returns>El usuario creado.</returns>
+        /// <exception cref="ArgumentException">Si las validaciones fallan.</exception>
+        Task<User> CreateUserAsync(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null);
+
+        /// <summary>
+        /// Actualiza un usuario existente con las propiedades especificadas, regenerando username si cambian nombres/apellidos.
+        /// </summary>
+        /// <param name="id">Identificador del usuario a actualizar.</param>
+        /// <param name="dni">Nuevo DNI de 8 dígitos (usado como password).</param>
+        /// <param name="nombres">Nuevos nombres del usuario.</param>
+        /// <param name="apellidos">Nuevos apellidos del usuario.</param>
+        /// <param name="cargoId">Nuevo identificador del cargo (nullable).</param>
+        /// <param name="rolId">Nuevo identificador del rol.</param>
+        /// <param name="tipo">Nuevo tipo de usuario (nullable, "Funcionario" o "Normal" para rol User).</param>
+        /// <returns>El usuario actualizado.</returns>
+        /// <exception cref="ArgumentException">Si las validaciones fallan o el usuario no existe.</exception>
+        Task<User> UpdateUserAsync(int id, string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null, string newUsername = null);
+
+        /// <summary>
+        /// Obtiene un usuario por su DNI.
+        /// </summary>
+        /// <param name="dni">DNI del usuario a buscar.</param>
+        /// <returns>El usuario encontrado o null si no existe.</returns>
+        Task<User> GetUserByDniAsync(string dni);
+
+        /// <summary>
+        /// Obtiene un usuario por su username.
+        /// </summary>
+        /// <param name="username">Nombre de usuario a buscar.</param>
+        /// <returns>El usuario encontrado o null si no existe.</returns>
+        Task<User> GetUserByUsernameAsync(string username);
+
+        /// <summary>
+        /// Obtiene una colección de todos los usuarios, con opción para incluir desactivados (soft delete).
+        /// </summary>
+        /// <param name="includeDeleted">Si true, incluye usuarios con IsDeleted=true; default false.</param>
+        /// <returns>Una colección de usuarios.</returns>
+        Task<IEnumerable<User>> GetAllUsersAsync(bool includeDeleted = false);
+
+        /// <summary>
+        /// Restaura un usuario desactivado (set IsDeleted=false), incluyendo documentos asociados.
+        /// </summary>
+        /// <param name="id">Identificador del usuario a restaurar.</param>
+        /// <returns>Una tarea que representa la operación asíncrona.</returns>
+        /// <exception cref="ArgumentException">Si el usuario no existe o ya está activo.</exception>
+        Task RestoreUserAsync(int id);
+
+        /// <summary>
+        /// Marca un usuario como eliminado lógicamente (soft delete), incluyendo documentos asociados.
+        /// </summary>
+        /// <param name="userId">Identificador del usuario a eliminar.</param>
+        /// <returns>Una tarea que representa la operación asíncrona.</returns>
+        /// <exception cref="ArgumentException">Si el userId es inválido.</exception>
+        /// <exception cref="InvalidOperationException">Si el usuario es un administrador.</exception>
+        Task DeleteUserAsync(int userId);
+
+        /// <summary>
+        /// Elimina permanentemente un usuario (hard delete), seteando IDs a null en documentos asociados para preservar datos.
+        /// </summary>
+        /// <param name="id">Identificador del usuario a eliminar permanentemente.</param>
+        /// <returns>Una tarea que representa la operación asíncrona.</returns>
+        /// <exception cref="ArgumentException">Si el usuario no existe.</exception>
+        /// <exception cref="InvalidOperationException">Si el usuario es un administrador.</exception>
+        Task HardDeleteUserAsync(int id);
+
+
+        Task<User> GetByIdAsync(int id);
+    }
+}
+
+/Application/Services
+
+namespace RapiFirma.Application.Services
+{
+    using Microsoft.IdentityModel.Tokens;
+    using RapiFirma.Domain.Entities;
+    using RapiFirma.Domain.Interfaces;
+    using System;
+    using System.IdentityModel.Tokens.Jwt;
+    using System.Security.Claims;
+    using System.Text;
+    using System.Threading.Tasks;
+    using Microsoft.Extensions.Logging;
+
+    public class AuthenticationService : IAuthenticationService
+    {
+        private readonly IUserRepository _userRepository;
+        private readonly IConfiguration _configuration;
+        private readonly ILogger<AuthenticationService> _logger;
+
+        public AuthenticationService(IUserRepository userRepository, IConfiguration configuration, ILogger<AuthenticationService> logger)
+        {
+            _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
+            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        public async Task<string> LoginAsync(string username, string password)
+        {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            {
+                _logger.LogWarning("Login attempt with invalid credentials.");
+                throw new ArgumentException("Credenciales inválidas.");
+            }
+
+            var user = await _userRepository.GetByUsernameAsync(username);
+            if (user == null || user.Dni != password || user.IsDeleted || user.Rol == null)
+            {
+                _logger.LogWarning("Login failed for username: {username}", username);
+                throw new ArgumentException("Credenciales inválidas o rol no asignado.");
+            }
+
+            _logger.LogInformation("User {username} logged in with role {role}", username, user.Rol.Nombre);
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Role, user.Rol.Nombre),
+                new Claim("Tipo", user.Tipo ?? "")
+            };
+            var token = new JwtSecurityToken(
+                issuer: _configuration["Jwt:Issuer"],
+                audience: _configuration["Jwt:Audience"],
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(10),
+                signingCredentials: credentials
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        public async Task<bool> ValidateTokenAsync(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return false;
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+            try
+            {
+                var tokenHandler = new JwtSecurityTokenHandler();
+                tokenHandler.ValidateToken(token, new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = _configuration["Jwt:Issuer"],
+                    ValidAudience = _configuration["Jwt:Audience"],
+                    IssuerSigningKey = key,
+                    ClockSkew = TimeSpan.Zero
+                }, out _);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Token validation failed.");
+                return false;
+            }
+        }
+    }
+}
+
+
+namespace RapiFirma.Application.Services
+{
+    using RapiFirma.Application.DTOs;
+    using RapiFirma.Domain.Entities;
+    using RapiFirma.Domain.Interfaces;
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Servicio para gestionar operaciones relacionadas con documentos.
+    /// </summary>
+    public class DocumentService : IDocumentService
+    {
+        private readonly IDocumentRepository _documentRepository;
+        private readonly IUserRepository _userRepository;
+        private readonly IHttpContextAccessor _httpContextAccessor;
+
+        public DocumentService(IDocumentRepository documentRepository, IUserRepository userRepository, IHttpContextAccessor httpContextAccessor)
+        {
+            _documentRepository = documentRepository ?? throw new ArgumentNullException(nameof(documentRepository));
+            _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
+            _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
+        }
+
+        public async Task<Document> UploadDocumentAsync(string nombrePdf, int destinatarioId, byte[] pdfData)
+        {
+            var userIdClaim = _httpContextAccessor.HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                throw new UnauthorizedAccessException("Usuario no autenticado o identificador inválido.");
+
+            var remitente = await _userRepository.GetByIdAsync(currentUserId);
+            if (remitente == null)
+                throw new ArgumentException("Remitente no encontrado.");
+
+            var document = new Document(nombrePdf, currentUserId, destinatarioId, pdfData);
+            return await _documentRepository.AddAsync(document);
+        }
+
+        public async Task<Document> SignDocumentAsync(int documentId, byte[] signedPdfData)
+        {
+            var document = await _documentRepository.GetByIdAsync(documentId);
+            if (document == null || document.IsDeleted)
+                throw new InvalidOperationException("El documento no existe o está eliminado.");
+
+            var userIdClaim = _httpContextAccessor.HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                throw new UnauthorizedAccessException("Usuario no autenticado o identificador inválido.");
+
+            var user = await _userRepository.GetByIdAsync(currentUserId);
+            if (user == null || user.IsDeleted)
+                throw new UnauthorizedAccessException("Usuario no encontrado o eliminado.");
+
+            if (document.DestinatarioID != currentUserId && user.Rol?.Nombre != "Admin")
+                throw new UnauthorizedAccessException("Solo el destinatario o un administrador puede firmar este documento.");
+
+            if (document.Estado != "pendiente")
+                throw new InvalidOperationException("El documento no está pendiente.");
+
+            if (signedPdfData == null || signedPdfData.Length == 0 || signedPdfData.Length > 20 * 1024 * 1024)
+                throw new ArgumentException("Los datos del PDF firmado son inválidos o superan los 10MB.");
+
+            document.UpdatePdfData(signedPdfData);
+            document.Sign();
+            return await _documentRepository.UpdateAsync(document);
+        }
+
+        public async Task<Document> SendDocumentAsync(int documentId, int newRecipientId)
+        {
+            var original = await _documentRepository.GetByIdAsync(documentId);
+            if (original == null || original.IsDeleted)
+                throw new ArgumentException("Documento no encontrado o eliminado.");
+
+            var userIdClaim = _httpContextAccessor.HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                throw new UnauthorizedAccessException("Usuario no autenticado o identificador inválido.");
+
+            var user = await _userRepository.GetByIdAsync(currentUserId);
+            if (user == null || user.IsDeleted)
+                throw new UnauthorizedAccessException("Usuario no encontrado o eliminado.");
+
+            if (original.DestinatarioID != currentUserId && user.Rol?.Nombre != "Admin")
+                throw new UnauthorizedAccessException("Solo el destinatario o un administrador puede reenviar este documento.");
+
+            var newRecipient = await _userRepository.GetByIdAsync(newRecipientId);
+            if (newRecipient == null || newRecipient.IsDeleted)
+                throw new ArgumentException("Destinatario no encontrado o eliminado.");
+
+            var newDocument = new Document(original.NombrePDF, currentUserId, newRecipientId, original.PdfData, "pendiente", DateTime.UtcNow);
+            return await _documentRepository.AddAsync(newDocument);
+        }
+
+        public async Task<Document> UpdateSignedDocumentAsync(int documentId, byte[] signedPdfData)
+        {
+            var document = await _documentRepository.GetByIdAsync(documentId);
+            if (document == null || document.IsDeleted)
+                throw new ArgumentException("Documento no encontrado o eliminado.");
+
+            if (signedPdfData == null || signedPdfData.Length == 0 || signedPdfData.Length > 20 * 1024 * 1024)
+                throw new ArgumentException("Los datos del PDF firmado son inválidos o superan los 10MB.");
+
+            document.UpdatePdfData(signedPdfData);
+            return await _documentRepository.UpdateAsync(document);
+        }
+
+        public async Task<byte[]> DownloadDocumentAsync(int documentId)
+        {
+            var document = await _documentRepository.GetByIdAsync(documentId);
+            if (document == null || document.IsDeleted)
+                throw new KeyNotFoundException("Documento no encontrado o eliminado.");
+
+            var userIdClaim = _httpContextAccessor.HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                throw new UnauthorizedAccessException("Usuario no autenticado o identificador inválido.");
+
+            var user = await _userRepository.GetByIdAsync(currentUserId);
+            if (user == null || user.IsDeleted)
+                throw new UnauthorizedAccessException("Usuario no encontrado o eliminado.");
+
+            if (document.RemitenteID != currentUserId && document.DestinatarioID != currentUserId && (user.Rol == null || user.Rol.Nombre != "Admin"))
+                throw new UnauthorizedAccessException("Solo el remitente, destinatario o un administrador puede descargar este documento.");
+
+            return document.PdfData;
+        }
+
+        public async Task<IEnumerable<Document>> GetDocumentsByUserAsync(int userId, bool received, string nombrePdf = null, string estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null)
+        {
+            if (userId <= 0)
+                throw new ArgumentException("Identificador de usuario inválido.");
+
+            var documents = await _documentRepository.GetByUserAsync(userId, received, nombrePdf, estado, fechaInicio, fechaFin);
+            return documents.Where(d => !d.IsDeleted);
+        }
+
+        public async Task DeleteDocumentAsync(int documentId)
+        {
+            if (documentId <= 0)
+                throw new ArgumentException("Identificador de documento inválido.");
+
+            var document = await _documentRepository.GetByIdAsync(documentId);
+            if (document == null || document.IsDeleted)
+                throw new ArgumentException("Documento no encontrado o eliminado.");
+
+            var userIdClaim = _httpContextAccessor.HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                throw new UnauthorizedAccessException("Usuario no autenticado o identificador inválido.");
+
+            var user = await _userRepository.GetByIdAsync(currentUserId);
+            if (user == null || user.IsDeleted)
+                throw new UnauthorizedAccessException("Usuario no encontrado o eliminado.");
+
+            if (document.RemitenteID != currentUserId && document.DestinatarioID != currentUserId && (user.Rol == null || user.Rol.Nombre != "Admin"))
+                throw new UnauthorizedAccessException("Solo el remitente, destinatario o un administrador puede eliminar este documento.");
+
+            document.SoftDelete();
+            await _documentRepository.UpdateAsync(document);
+        }
+
+        public async Task<Document> GetByIdAsync(int documentId)
+        {
+            if (documentId <= 0)
+                throw new ArgumentException("Identificador de documento inválido.");
+
+            return await _documentRepository.GetByIdAsync(documentId);
+        }
+
+        public async Task<IEnumerable<DocumentDto>> GetAllDocumentsAsync(string nombrePdf = null, string estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, bool includeDeleted = false)
+        {
+            if (!string.IsNullOrEmpty(estado) && estado.ToLower() != "pendiente" && estado.ToLower() != "firmado")
+                throw new ArgumentException("El estado debe ser 'pendiente' o 'firmado'.");
+
+            var documents = await _documentRepository.GetAllAsync(nombrePdf, estado, fechaInicio, fechaFin, includeDeleted);
+
+            // Mapeo explícito a DTO (resuelve conversión)
+            return documents.Select(d => new DocumentDto
+            {
+                Id = d.Id,
+                NombrePDF = d.NombrePDF,
+                RemitenteID = d.RemitenteID,
+                RemitenteNombre = d.Remitente != null ? $"{d.Remitente.Nombres} {d.Remitente.Apellidos}" : "Desconocido",
+                RemitenteTipo = d.Remitente?.Tipo,
+                DestinatarioID = d.DestinatarioID,
+                DestinatarioNombre = d.Destinatario != null ? $"{d.Destinatario.Nombres} {d.Destinatario.Apellidos}" : "Desconocido",
+                DestinatarioTipo = d.Destinatario?.Tipo,
+                ReenviadoPorID = d.ReenviadoPorID,
+                ReenviadoPorNombre = d.ReenviadoPor != null ? $"{d.ReenviadoPor.Nombres} {d.ReenviadoPor.Apellidos}" : null,
+                Estado = d.Estado,
+                FechaEnvio = d.FechaEnvio,
+                FechaReenvio = d.FechaReenvio,
+                FechaFirma = d.FechaFirma,
+                IsDeleted = d.IsDeleted
+            }).ToList();
+        }
+    }
+}
+
+namespace RapiFirma.Application.Services
+{
+    using RapiFirma.Domain.Entities;
+    using RapiFirma.Domain.Interfaces;
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Threading.Tasks;
+    using Microsoft.Extensions.Logging;
+
+    public class UserService : IUserService
+    {
+        private readonly IUserRepository _userRepository;
+        private readonly IRolRepository _rolRepository;
+        private readonly IDocumentRepository _documentRepository;
+        private readonly ILogger<UserService> _logger;
+
+        public UserService(IUserRepository userRepository, IRolRepository rolRepository, IDocumentRepository documentRepository, ILogger<UserService> logger)
+        {
+            _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
+            _rolRepository = rolRepository ?? throw new ArgumentNullException(nameof(rolRepository));
+            _documentRepository = documentRepository ?? throw new ArgumentNullException(nameof(documentRepository));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        public async Task<User> CreateUserAsync(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null)
+        {
+            if (await _userRepository.GetByDniAsync(dni) != null)
+                throw new ArgumentException("El DNI ya está en uso.");
+
+            var roles = await _rolRepository.GetAllAsync();
+            if (!roles.Any(r => r.Id == rolId))
+                throw new ArgumentException("El rol especificado no existe.");
+            var rol = roles.First(r => r.Id == rolId);
+            if (rol.Nombre != "Admin" && rol.Nombre != "User")
+                throw new ArgumentException("El rol debe ser 'Admin' o 'User'.");
+
+            if (rol.Nombre == "User" && !string.IsNullOrWhiteSpace(tipo))
+            {
+                if (tipo != "Funcionario" && tipo != "Normal")
+                    throw new ArgumentException("El tipo debe ser 'Funcionario' o 'Normal' para rol User.");
+            }
+
+            var user = new User(dni, nombres, apellidos, cargoId, rolId, tipo);
+            return await _userRepository.AddAsync(user);
+        }
+
+        public async Task<User> UpdateUserAsync(int id, string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null, string newUsername = null)
+        {
+            var user = await _userRepository.GetByIdAsync(id);
+            if (user == null)
+                throw new ArgumentException("Usuario no encontrado.");
+
+            // Validar unicidad DNI si cambia
+            if (user.Dni != dni && await _userRepository.GetByDniAsync(dni) != null)
+                throw new ArgumentException("El DNI ya está en uso.");
+
+            // Validar unicidad username si nuevo proporcionado y cambia
+            if (!string.IsNullOrWhiteSpace(newUsername) && user.Username != newUsername && await _userRepository.GetByUsernameAsync(newUsername) != null)
+                throw new ArgumentException("El username ya está en uso.");
+
+            // Validar rol con AsNoTracking para no trackear entidades
+            var roles = await _rolRepository.GetAllAsync();  // Asume AsNoTracking en repo
+            if (!roles.Any(r => r.Id == rolId))
+                throw new ArgumentException("El rol especificado no existe.");
+            var rol = roles.First(r => r.Id == rolId);  // No tracked, seguro
+            if (rol.Nombre != "Admin" && rol.Nombre != "User")
+                throw new ArgumentException("El rol debe ser 'Admin' o 'User'.");
+
+            if (rol.Nombre == "User" && !string.IsNullOrWhiteSpace(tipo) && tipo != "Funcionario" && tipo != "Normal")
+                throw new ArgumentException("El tipo debe ser 'Funcionario' o 'Normal' para rol User.");
+
+            user.Update(dni, nombres, apellidos, cargoId, rolId, tipo, newUsername);
+            _logger.LogInformation("User ID {Id} updated by Admin", id);
+            return await _userRepository.UpdateAsync(user);
+        }
+
+        public async Task<User> GetUserByDniAsync(string dni)
+        {
+            return await _userRepository.GetByDniAsync(dni);
+        }
+
+        public async Task<User> GetUserByUsernameAsync(string username)
+        {
+            return await _userRepository.GetByUsernameAsync(username.ToLower());
+        }
+
+        public async Task<IEnumerable<User>> GetAllUsersAsync(bool includeDeleted = false)
+        {
+            return await _userRepository.GetAllAsync(includeDeleted);
+        }
+
+        public async Task RestoreUserAsync(int id)
+        {
+            var user = await _userRepository.GetByIdAsync(id, includeDeleted: true);
+            if (user == null)
+                throw new ArgumentException("Usuario no encontrado.");
+
+            // Restaurar docs asociados
+            var documentsEnviados = await _documentRepository.GetByUserAsync(id, false, includeDeleted: true);  // Ajusta GetByUserAsync similarmente si necesario
+            var documentsRecibidos = await _documentRepository.GetByUserAsync(id, true, includeDeleted: true);
+            foreach (var doc in documentsEnviados.Concat(documentsRecibidos))
+            {
+                if (doc.IsDeleted)
+                {
+                    doc.Restore();
+                    await _documentRepository.UpdateAsync(doc);
+                }
+            }
+
+            user.Restore();
+            _logger.LogInformation("User ID {Id} restored by Admin", id);
+            await _userRepository.UpdateAsync(user);
+        }
+
+        public async Task HardDeleteUserAsync(int id)
+        {
+            var user = await _userRepository.GetByIdAsync(id, includeDeleted: true);
+            if (user == null)
+                throw new ArgumentException("Usuario no encontrado.");
+
+            if (user.Rol?.Nombre == "Admin")
+                throw new InvalidOperationException("No se puede eliminar permanentemente un administrador.");
+
+            await _userRepository.HardDeleteAsync(id);
+            _logger.LogInformation("User ID {Id} hard deleted by Admin", id);
+        }
+
+        public async Task DeleteUserAsync(int userId)
+        {
+            if (userId <= 0)
+                throw new ArgumentException("El identificador del usuario es inválido.");
+
+            var user = await _userRepository.GetByIdAsync(userId);
+            if (user == null)
+                throw new ArgumentException("El usuario no existe.");
+
+            _logger.LogInformation("User ID {UserId} found with IsDeleted={IsDeleted}, Dni={Dni}, Username={Username}", userId, user.IsDeleted, user.Dni, user.Username);
+
+            if (user.IsDeleted)
+                throw new ArgumentException("El usuario ya está eliminado.");
+
+            if (user.Rol == null)
+                throw new InvalidOperationException("El usuario no tiene un rol asignado.");
+
+            if (user.Rol.Nombre == "Admin")
+                throw new InvalidOperationException("No se puede eliminar un administrador.");
+
+            // Soft delete documentos asociados
+            var documentsEnviados = await _documentRepository.GetByUserAsync(userId, false);
+            var documentsRecibidos = await _documentRepository.GetByUserAsync(userId, true);
+            foreach (var doc in documentsEnviados.Concat(documentsRecibidos))
+            {
+                if (!doc.IsDeleted)
+                {
+                    _logger.LogInformation("Applying soft delete to document ID {DocumentId} for user ID {UserId}", doc.Id, userId);
+                    doc.SoftDelete();
+                    await _documentRepository.UpdateAsync(doc);
+                }
+            }
+
+            user.SoftDelete();
+            _logger.LogInformation("Applying soft delete to user ID {UserId}", userId);
+            await _userRepository.UpdateAsync(user);
+            _logger.LogInformation("User ID {UserId} soft deleted successfully", userId);
+        }
+
+        public async Task<User> GetByIdAsync(int id)
+        {
+            if (id <= 0)
+                throw new ArgumentException("El ID del usuario debe ser mayor que cero.");
+            var user = await _userRepository.GetByIdAsync(id);
+            if (user == null)
+                throw new ArgumentException("Usuario no encontrado.");
+            return user;
+        }
+    }
+}
+
+/Infrastructure/Authorization
+using Hangfire.Dashboard;
+using Microsoft.AspNetCore.Http;
+
+namespace RapiFirma.Infrastructure.Authorization
+{
+    public class HangfireDashboardAuthorizationFilter : IDashboardAuthorizationFilter
+    {
+        private readonly IConfiguration _configuration;
+
+        public HangfireDashboardAuthorizationFilter(IConfiguration configuration)
+        {
+            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        }
+
+        public bool Authorize(DashboardContext context)
+        {
+            var httpContext = context.GetHttpContext();
+            var username = _configuration["Hangfire:DashboardUsername"];
+            var password = _configuration["Hangfire:DashboardPassword"];
+
+            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+                return false;
+
+            var authHeader = httpContext.Request.Headers["Authorization"].FirstOrDefault();
+            if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Basic "))
+                return false;
+
+            var encodedCredentials = authHeader.Substring("Basic ".Length).Trim();
+            var decodedCredentials = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encodedCredentials));
+            var credentials = decodedCredentials.Split(':');
+
+            if (credentials.Length != 2)
+                return false;
+
+            var providedUsername = credentials[0];
+            var providedPassword = credentials[1];
+
+            return providedUsername == username && providedPassword == password;
+        }
+    }
+}
+
+/Infrastructure/Persistence
+
+namespace RapiFirma.Infrastructure.Persistence
+{
+    using RapiFirma.Domain.Entities;
+    using RapiFirma.Domain.Interfaces;
+    using Microsoft.EntityFrameworkCore;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Repositorio para gestionar operaciones de persistencia de cargos.
+    /// </summary>
+    public class CargoRepository : IRepository<Cargo>, ICargoRepository
+    {
+        private readonly RapiFirmaDbContext _context;
+
+        /// <summary>
+        /// Inicializa una nueva instancia de CargoRepository.
+        /// </summary>
+        /// <param name="context">Contexto de base de datos.</param>
+        /// <exception cref="ArgumentNullException">Si el contexto es null.</exception>
+        public CargoRepository(RapiFirmaDbContext context)
+        {
+            _context = context ?? throw new ArgumentNullException(nameof(context));
+        }
+
+        /// <summary>
+        /// Obtiene un cargo por su identificador único.
+        /// </summary>
+        public async Task<Cargo> GetByIdAsync(int id)
+        {
+            if (id <= 0) throw new ArgumentException("ID inválido.");
+            return await _context.Cargos.FindAsync(id);
+        }
+
+        /// <summary>
+        /// Obtiene todas las entidades de cargos.
+        /// </summary>
+        public async Task<IEnumerable<Cargo>> GetAllAsync()
+        {
+            return await _context.Cargos.Where(c => !c.IsDeleted).ToListAsync();
+        }
+
+        /// <summary>
+        /// Agrega un nuevo cargo al repositorio.
+        /// </summary>
+        public async Task<Cargo> AddAsync(Cargo entity)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            var addedEntity = await _context.Cargos.AddAsync(entity);
+            await _context.SaveChangesAsync();
+            return addedEntity.Entity;
+        }
+
+        /// <summary>
+        /// Actualiza un cargo existente en el repositorio.
+        /// </summary>
+        public async Task<Cargo> UpdateAsync(Cargo entity)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            _context.Cargos.Update(entity);
+            await _context.SaveChangesAsync();
+            return entity;
+        }
+
+        /// <summary>
+        /// Marca un cargo como eliminado lógicamente.
+        /// </summary>
+        public async Task DeleteAsync(int id)
+        {
+            if (id <= 0) throw new ArgumentException("ID inválido.");
+            var entity = await _context.Cargos.FindAsync(id);
+            if (entity == null) throw new KeyNotFoundException("Cargo no encontrado.");
+            entity.SoftDelete();
+            await _context.SaveChangesAsync();
+        }
+    }
+}
+
+
+namespace RapiFirma.Infrastructure.Persistence
+{
+    using Microsoft.EntityFrameworkCore;
+    using RapiFirma.Application.DTOs;
+    using RapiFirma.Domain.Entities;
+    using RapiFirma.Domain.Interfaces;
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Repositorio para gestionar operaciones de persistencia de documentos.
+    /// </summary>
+    public class DocumentRepository : IRepository<Document>, IDocumentRepository
+    {
+        private readonly RapiFirmaDbContext _context;
+
+        public DocumentRepository(RapiFirmaDbContext context)
+        {
+            _context = context ?? throw new ArgumentNullException(nameof(context));
+        }
+
+        public async Task<Document> GetByIdAsync(int id)
+        {
+            if (id <= 0) throw new ArgumentException("ID inválido.");
+            return await _context.Documents
+                .Include(d => d.Remitente)
+                .Include(d => d.Destinatario)
+                .FirstOrDefaultAsync(d => d.Id == id && !d.IsDeleted);
+        }
+
+        public async Task<IEnumerable<Document>> GetAllAsync()
+        {
+            return await _context.Documents
+                .Include(d => d.Remitente)
+                .Include(d => d.Destinatario)
+                .Where(d => !d.IsDeleted)
+                .ToListAsync();
+        }
+
+        public async Task<Document> AddAsync(Document entity)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            var addedEntity = await _context.Documents.AddAsync(entity);
+            await _context.SaveChangesAsync();
+            return addedEntity.Entity;
+        }
+
+        public async Task<Document> UpdateAsync(Document entity)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            _context.Documents.Update(entity);
+            await _context.SaveChangesAsync();
+            return entity;
+        }
+
+        public async Task DeleteAsync(int id)
+        {
+            if (id <= 0) throw new ArgumentException("ID inválido.");
+            var entity = await GetByIdAsync(id);
+            if (entity == null) throw new KeyNotFoundException("Documento no encontrado.");
+            entity.SoftDelete();
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<IEnumerable<Document>> GetByUserAsync(int userId, bool received, string nombrePdf = null, string estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, bool includeDeleted = false)
+        {
+            if (userId <= 0) throw new ArgumentException("ID de usuario inválido.");
+
+            var query = _context.Documents
+                .Include(d => d.Remitente)
+                .Include(d => d.Destinatario)
+                .Where(d => (includeDeleted || !d.IsDeleted) && (d.RemitenteID == userId || d.DestinatarioID == userId));
+
+            if (received)
+                query = query.Where(d => d.DestinatarioID == userId);
+            else
+                query = query.Where(d => d.RemitenteID == userId);
+
+            if (!string.IsNullOrWhiteSpace(nombrePdf))
+                query = query.Where(d => d.NombrePDF.Contains(nombrePdf));
+
+            if (!string.IsNullOrWhiteSpace(estado))
+                query = query.Where(d => d.Estado == estado);
+
+            if (fechaInicio.HasValue)
+                query = query.Where(d => d.FechaEnvio >= fechaInicio.Value);
+
+            if (fechaFin.HasValue)
+                query = query.Where(d => d.FechaEnvio <= fechaFin.Value);
+
+            return await query.ToListAsync();
+        }
+
+        public async Task HardDeleteAsync(int id)
+        {
+            if (id <= 0) throw new ArgumentException("ID inválido.");
+            var doc = await _context.Documents.FindAsync(id);  // Ignora IsDeleted
+            if (doc == null) throw new KeyNotFoundException("Documento no encontrado.");
+            _context.Documents.Remove(doc);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<IEnumerable<Document>> GetAllAsync(string nombrePdf = null, string estado = null, DateTime? fechaInicio = null, DateTime? fechaFin = null, bool includeDeleted = false)
+        {
+            var query = _context.Documents
+                .AsNoTracking() // Optimiza: No tracking para read-only
+                .Include(d => d.Remitente)
+                .Include(d => d.Destinatario)
+                .Include(d => d.ReenviadoPor)
+                .Where(d => includeDeleted || !d.IsDeleted);
+
+            if (!string.IsNullOrWhiteSpace(nombrePdf))
+            {
+                query = query.Where(d => EF.Functions.ILike(d.NombrePDF, $"%{nombrePdf}%"));
+            }
+
+            if (!string.IsNullOrEmpty(estado))
+            {
+                query = query.Where(d => d.Estado.ToLower() == estado.ToLower());
+            }
+
+            if (fechaInicio.HasValue || fechaFin.HasValue)
+            {
+                query = query.Where(d =>
+                    (!fechaInicio.HasValue || (string.IsNullOrEmpty(estado) || estado.ToLower() == "pendiente" ? d.FechaEnvio >= fechaInicio.Value : d.FechaFirma >= fechaInicio.Value)) &&
+                    (!fechaFin.HasValue || (string.IsNullOrEmpty(estado) || estado.ToLower() == "pendiente" ? d.FechaEnvio <= fechaFin.Value : d.FechaFirma <= fechaFin.Value))
+                );
+            }
+
+            return await query.ToListAsync(); // Retorna entidades, pero sin PdfData accesado
+        }
+    }
+}
+
+namespace RapiFirma.Infrastructure.Persistence
+{
+    using Microsoft.EntityFrameworkCore;
+    using RapiFirma.Domain.Entities;
+
+    /// <summary>
+    /// Contexto de base de datos para la aplicación RapiFirma, gestiona las entidades del dominio.
+    /// </summary>
+    public class RapiFirmaDbContext : DbContext
+    {
+        /// <summary>
+        /// Conjunto de entidades User.
+        /// </summary>
+        public DbSet<User> Users { get; set; }
+
+        /// <summary>
+        /// Conjunto de entidades Document.
+        /// </summary>
+        public DbSet<Document> Documents { get; set; }
+
+        /// <summary>
+        /// Conjunto de entidades Cargo.
+        /// </summary>
+        public DbSet<Cargo> Cargos { get; set; }
+
+        /// <summary>
+        /// Conjunto de entidades Rol.
+        /// </summary>
+        public DbSet<Rol> Roles { get; set; }
+
+        /// <summary>
+        /// Inicializa una nueva instancia de RapiFirmaDbContext con las opciones proporcionadas.
+        /// </summary>
+        /// <param name="options">Opciones de configuración del contexto.</param>
+        public RapiFirmaDbContext(DbContextOptions<RapiFirmaDbContext> options) : base(options)
+        {
+        }
+
+        /// <summary>
+        /// Configura el modelo de la base de datos, definiendo relaciones, índices, tipos y valores predeterminados.
+        /// </summary>
+        /// <param name="modelBuilder">Constructor del modelo de Entity Framework.</param>
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            // Relación uno-a-uno entre User y Rol
+            modelBuilder.Entity<User>()
+                .HasOne(u => u.Rol)
+                .WithMany()
+                .HasForeignKey(u => u.RolId)
+                .IsRequired()
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Relación uno-a-uno opcional entre User y Cargo
+            modelBuilder.Entity<User>()
+                .HasOne(u => u.Cargo)
+                .WithMany()
+                .HasForeignKey(u => u.CargoId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Relación uno-a-muchos entre User y Document (enviados)
+            modelBuilder.Entity<User>()
+                .HasMany(u => u.DocumentsEnviados)
+                .WithOne(d => d.Remitente)
+                .HasForeignKey(d => d.RemitenteID)
+                .OnDelete(DeleteBehavior.SetNull);  // Cambiado a SetNull para hard delete seguro
+
+            // Relación uno-a-muchos entre User y Document (recibidos)
+            modelBuilder.Entity<User>()
+                .HasMany(u => u.DocumentsRecibidos)
+                .WithOne(d => d.Destinatario)
+                .HasForeignKey(d => d.DestinatarioID)
+                .OnDelete(DeleteBehavior.SetNull);  // Cambiado a SetNull
+
+            // Relación opcional para ReenviadoPor
+            modelBuilder.Entity<Document>()
+                .HasOne(d => d.ReenviadoPor)
+                .WithMany()
+                .HasForeignKey(d => d.ReenviadoPorID)
+                .OnDelete(DeleteBehavior.SetNull);  // Cambiado a SetNull
+
+            // Índices
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.Dni)
+                .IsUnique();
+
+            modelBuilder.Entity<User>()
+                 .Property(u => u.Tipo)
+                 .IsRequired(false);
+
+            modelBuilder.Entity<Document>()
+                .HasIndex(d => new { d.Estado, d.FechaEnvio })
+                .HasDatabaseName("idx_documents_status_date");
+
+            modelBuilder.Entity<Document>()
+                .HasIndex(d => d.FechaExpiracion)
+                .HasDatabaseName("idx_documents_expiration");
+
+            // Tipos de datos
+            modelBuilder.Entity<Document>()
+                .Property(d => d.PdfData)
+                .HasColumnType("BYTEA");
+
+            // Valores predeterminados
+            modelBuilder.Entity<User>()
+                .Property(u => u.IsDeleted)
+                .HasDefaultValue(false);
+
+            modelBuilder.Entity<Document>()
+                .Property(d => d.IsDeleted)
+                .HasDefaultValue(false);
+
+            modelBuilder.Entity<Document>()
+                .Property(d => d.Estado)
+                .HasDefaultValue("pendiente");
+
+            modelBuilder.Entity<Cargo>()
+                .Property(c => c.IsDeleted)
+                .HasDefaultValue(false);
+
+            modelBuilder.Entity<Rol>()
+                .Property(r => r.IsDeleted)
+                .HasDefaultValue(false);
+
+            base.OnModelCreating(modelBuilder);
+        }
+    }
+}
+
+namespace RapiFirma.Infrastructure.Persistence
+{
+    using RapiFirma.Domain.Entities;
+    using RapiFirma.Domain.Interfaces;
+    using Microsoft.EntityFrameworkCore;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Repositorio para gestionar operaciones de persistencia de roles.
+    /// </summary>
+    public class RolRepository : IRepository<Rol>, IRolRepository
+    {
+        private readonly RapiFirmaDbContext _context;
+
+        /// <summary>
+        /// Inicializa una nueva instancia de RolRepository.
+        /// </summary>
+        /// <param name="context">Contexto de base de datos.</param>
+        /// <exception cref="ArgumentNullException">Si el contexto es null.</exception>
+        public RolRepository(RapiFirmaDbContext context)
+        {
+            _context = context ?? throw new ArgumentNullException(nameof(context));
+        }
+
+        /// <summary>
+        /// Obtiene un rol por su identificador único.
+        /// </summary>
+        public async Task<Rol> GetByIdAsync(int id)
+        {
+            if (id <= 0) throw new ArgumentException("ID inválido.");
+            return await _context.Roles.FindAsync(id);
+        }
+
+        /// <summary>
+        /// Obtiene todas las entidades de roles.
+        /// </summary>
+        public async Task<IEnumerable<Rol>> GetAllAsync()
+        {
+            return await _context.Roles.AsNoTracking().Where(r => !r.IsDeleted).ToListAsync();
+        }
+
+        /// <summary>
+        /// Agrega un nuevo rol al repositorio.
+        /// </summary>
+        public async Task<Rol> AddAsync(Rol entity)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            var addedEntity = await _context.Roles.AddAsync(entity);
+            await _context.SaveChangesAsync();
+            return addedEntity.Entity;
+        }
+
+        /// <summary>
+        /// Actualiza un rol existente en el repositorio.
+        /// </summary>
+        public async Task<Rol> UpdateAsync(Rol entity)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            _context.Roles.Update(entity);
+            await _context.SaveChangesAsync();
+            return entity;
+        }
+
+        /// <summary>
+        /// Marca un rol como eliminado lógicamente.
+        /// </summary>
+        public async Task DeleteAsync(int id)
+        {
+            if (id <= 0) throw new ArgumentException("ID inválido.");
+            var entity = await _context.Roles.FindAsync(id);
+            if (entity == null) throw new KeyNotFoundException("Rol no encontrado.");
+            entity.SoftDelete();
+            await _context.SaveChangesAsync();
+        }
+    }
+}
+
+
+namespace RapiFirma.Infrastructure.Persistence
+{
+    using RapiFirma.Domain.Entities;
+    using RapiFirma.Domain.Interfaces;
+    using Microsoft.EntityFrameworkCore;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Threading.Tasks;
+    using Microsoft.Extensions.Logging;
+
+    public class UserRepository : IRepository<User>, IUserRepository
+    {
+        private readonly RapiFirmaDbContext _context;
+        private readonly ILogger<UserRepository> _logger;
+
+        public UserRepository(RapiFirmaDbContext context, ILogger<UserRepository> logger)
+        {
+            _context = context ?? throw new ArgumentNullException(nameof(context));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        public async Task<User> GetByIdAsync(int id)
+        {
+            if (id <= 0) throw new ArgumentException("ID inválido.");
+            var user = await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Rol)
+                .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
+            _logger.LogInformation("GetByIdAsync for user ID {Id} returned IsDeleted={IsDeleted}", id, user?.IsDeleted ?? false);
+            return user;
+        }
+
+        public async Task<IEnumerable<User>> GetAllAsync()
+        {
+            return await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Rol)
+                .Where(u => !u.IsDeleted)
+                .ToListAsync();
+        }
+        public async Task<IEnumerable<User>> GetAllAsync(bool includeDeleted = false)
+        {
+            return await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Rol)
+                .Where(u => includeDeleted || !u.IsDeleted)
+                .ToListAsync();
+        }
+        public async Task<User> AddAsync(User entity)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            var addedEntity = await _context.Users.AddAsync(entity);
+            await _context.SaveChangesAsync();
+            return addedEntity.Entity;
+        }
+
+        public async Task<User> UpdateAsync(User entity)
+        {
+            if (entity == null) throw new ArgumentNullException(nameof(entity));
+            _logger.LogInformation("Attempting to update user ID {Id} with IsDeleted={IsDeleted}", entity.Id, entity.IsDeleted);
+            _context.Users.Update(entity);
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("User ID {Id} updated successfully", entity.Id);
+            return entity;
+        }
+
+        public async Task DeleteAsync(int id)
+        {
+            if (id <= 0) throw new ArgumentException("ID inválido.");
+            var entity = await GetByIdAsync(id);
+            if (entity == null) throw new KeyNotFoundException("Usuario no encontrado.");
+            entity.SoftDelete();
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<User> GetByDniAsync(string dni)
+        {
+            return await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Rol)
+                .FirstOrDefaultAsync(u => u.Dni == dni && !u.IsDeleted);
+        }
+
+        public async Task<User> GetByUsernameAsync(string username)
+        {
+            if (string.IsNullOrWhiteSpace(username))
+                throw new ArgumentException("Username inválido.");
+            return await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Rol)
+                .FirstOrDefaultAsync(u => u.Username == username && !u.IsDeleted);
+        }
+
+        public async Task<IEnumerable<User>> GetByRoleAsync(int roleId)
+        {
+            return await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Rol)
+                .Where(u => u.RolId == roleId && !u.IsDeleted)
+                .ToListAsync();
+        }
+
+        public async Task HardDeleteAsync(int id)
+        {
+            if (id <= 0) throw new ArgumentException("ID inválido.");
+            var user = await _context.Users.FindAsync(id);  // Usa Find para hard delete, ignora IsDeleted
+            if (user == null) throw new KeyNotFoundException("Usuario no encontrado.");
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<User> GetByIdAsync(int id, bool includeDeleted = false)
+        {
+            if (id <= 0) throw new ArgumentException("ID inválido.");
+            return await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Rol)
+                .FirstOrDefaultAsync(u => u.Id == id && (includeDeleted || !u.IsDeleted));
+        }
+    }
+}
+
+
+//Infrastructure/Jobs
+
+namespace RapiFirma.Infrastructure.Jobs
+{
+    using Hangfire;
+    using Microsoft.EntityFrameworkCore;
+    using RapiFirma.Domain.Interfaces;
+    using RapiFirma.Infrastructure.Persistence;
+    using System.Linq;
+    using System.Threading.Tasks;
+
+    public class DocumentCleanupJob
+    {
+        private readonly IDocumentRepository _documentRepository;
+        private readonly RapiFirmaDbContext _context;
+
+        public DocumentCleanupJob(IDocumentRepository documentRepository, RapiFirmaDbContext context)
+        {
+            _documentRepository = documentRepository;
+            _context = context;
+        }
+
+        [AutomaticRetry(Attempts = 3)]
+        public async Task RunAsync()
+        {
+            var expiredDocs = await _context.Documents
+                .Where(d => d.FechaExpiracion < DateTime.UtcNow)
+                .Select(d => d.Id)
+                .ToListAsync();
+
+            foreach (var id in expiredDocs)
+            {
+                await _documentRepository.HardDeleteAsync(id);
+            }
+        }
+    }
+}
+
+/Application/DTOs
+
+namespace RapiFirma.Application.DTOs
+{
+    using System.ComponentModel.DataAnnotations;
+
+    /// <summary>
+    /// Representa los datos de transferencia para un cargo, usado en respuestas de la API.
+    /// </summary>
+    public class CargoDto
+    {
+        /// <summary>
+        /// Identificador único del cargo.
+        /// </summary>
+        public int Id { get; set; }
+
+        /// <summary>
+        /// Nombre del cargo.
+        /// </summary>
+        [Required]
+        public string NombreCargo { get; set; }
+
+        /// <summary>
+        /// Indicador de eliminación lógica.
+        /// </summary>
+        public bool IsDeleted { get; set; }
+    }
+}
+
+namespace RapiFirma.Application.DTOs
+{
+    using System;
+    using System.ComponentModel.DataAnnotations;
+
+    /// <summary>
+    /// Representa los datos de transferencia para un documento, usado en respuestas de la API.
+    /// </summary>
+    public class DocumentDto
+    {
+        /// <summary>
+        /// Identificador único del documento.
+        /// </summary>
+        public int Id { get; set; }
+
+        /// <summary>
+        /// Nombre del archivo PDF.
+        /// </summary>
+        public string NombrePDF { get; set; }
+
+        /// <summary>
+        /// Identificador del remitente original.
+        /// </summary>
+        public int RemitenteID { get; set; }
+
+        /// <summary>
+        /// Nombre completo del remitente original.
+        /// </summary>
+        public string RemitenteNombre { get; set; }
+
+        /// <summary>
+        /// Tipo del remitente original (null si es admin).
+        /// </summary>
+        public string RemitenteTipo { get; set; }
+
+        /// <summary>
+        /// Identificador del destinatario actual.
+        /// </summary>
+        public int DestinatarioID { get; set; }
+
+        /// <summary>
+        /// Nombre completo del destinatario actual.
+        /// </summary>
+        public string DestinatarioNombre { get; set; }
+
+        /// <summary>
+        /// Tipo del destinatario actual.
+        /// </summary>
+        public string DestinatarioTipo { get; set; }
+
+        /// <summary>
+        /// Identificador del usuario que realizó el reenvío (nullable).
+        /// </summary>
+        public int? ReenviadoPorID { get; set; }
+
+        /// <summary>
+        /// Nombre completo del usuario que realizó el reenvío (nullable).
+        /// </summary>
+        public string ReenviadoPorNombre { get; set; }
+
+        /// <summary>
+        /// Estado del documento ("pendiente" o "firmado").
+        /// </summary>
+        public string Estado { get; set; }
+
+        /// <summary>
+        /// Fecha de envío del documento.
+        /// </summary>
+        public DateTime FechaEnvio { get; set; }
+
+        /// <summary>
+        /// Fecha de reenvío del documento (nullable).
+        /// </summary>
+        public DateTime? FechaReenvio { get; set; }
+
+        /// <summary>
+        /// Fecha de firma del documento (nullable).
+        /// </summary>
+        public DateTime? FechaFirma { get; set; }
+
+        /// <summary>
+        /// Indicador de eliminación lógica.
+        /// </summary>
+        public bool IsDeleted { get; set; }
+    
+    }
+}
+
+namespace RapiFirma.Application.DTOs
+{
+    using System.ComponentModel.DataAnnotations;
+
+    /// <summary>
+    /// Representa los datos de transferencia para un rol, usado en respuestas de la API.
+    /// </summary>
+    public class RolDto
+    {
+        /// <summary>
+        /// Identificador único del rol.
+        /// </summary>
+        public int Id { get; set; }
+
+        /// <summary>
+        /// Nombre del rol ("Admin" o "User").
+        /// </summary>
+        [Required]
+        public string Nombre { get; set; } = "";
+
+        /// <summary>
+        /// Indicador de eliminación lógica.
+        /// </summary>
+        public bool IsDeleted { get; set; }
+    }
+}
+
+namespace RapiFirma.Application.DTOs
+{
+    using System.ComponentModel.DataAnnotations;
+
+    /// <summary>
+    /// Representa los datos de transferencia para un usuario, usado en respuestas de la API.
+    /// </summary>
+    public class UserDto
+    {
+        /// <summary>
+        /// Identificador único del usuario.
+        /// </summary>
+        public int Id { get; set; }
+
+        /// <summary>
+        /// Número de DNI del usuario.
+        /// </summary>
+        [Required]
+        public string Dni { get; set; }
+
+        /// <summary>
+        /// Nombres del usuario.
+        /// </summary>
+        [Required]
+        public string Nombres { get; set; }
+
+        /// <summary>
+        /// Apellidos del usuario.
+        /// </summary>
+        [Required]
+        public string Apellidos { get; set; }
+
+        /// <summary>
+        /// Nombre de usuario generado.
+        /// </summary>
+        [Required]
+        public string Username { get; set; }
+
+        /// <summary>
+        /// Identificador del cargo asociado (nullable).
+        /// </summary>
+        public int? CargoId { get; set; }
+
+        /// <summary>
+        /// Identificador del rol asociado.
+        /// </summary>
+        [Required]
+        public int RolId { get; set; }
+
+        /// <summary>
+        /// Tipo de usuario (nullable, "Funcionario" o "Normal" para rol User).
+        /// </summary>
+        public string Tipo { get; set; }
+
+        /// <summary>
+        /// Indicador de eliminación lógica.
+        /// </summary>
+        public bool IsDeleted { get; set; }
+
+        public string Estado { get; set; }
+    }
+}
+
+
+/Controllers
+
+namespace RapiFirma.Controllers
+{
+    using Microsoft.AspNetCore.Mvc;
+    using RapiFirma.Domain.Interfaces;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Controlador para operaciones de autenticación.
+    /// </summary>
+    [Route("api/[controller]")]
+    [ApiController]
+    public class AuthController : ControllerBase
+    {
+        private readonly IAuthenticationService _authenticationService;
+
+        /// <summary>
+        /// Inicializa una nueva instancia de AuthController.
+        /// </summary>
+        /// <param name="authenticationService">Servicio de autenticación.</param>
+        /// <exception cref="ArgumentNullException">Si el servicio es null.</exception>
+        public AuthController(IAuthenticationService authenticationService)
+        {
+            _authenticationService = authenticationService ?? throw new ArgumentNullException(nameof(authenticationService));
+        }
+
+        /// <summary>
+        /// Inicia sesión con las credenciales del usuario y devuelve un JWT.
+        /// </summary>
+        /// <param name="username">Nombre de usuario.</param>
+        /// <param name="password">Contraseña (DNI).</param>
+        /// <returns>Token JWT si las credenciales son válidas.</returns>
+        /// <response code="200">Devuelve el token JWT.</response>
+        /// <response code="400">Si las credenciales son inválidas.</response>
+        [HttpPost("login")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Login([FromBody] LoginRequest request)
+        {
+            try
+            {
+                var token = await _authenticationService.LoginAsync(request.Username, request.Password);
+                if (token == null)
+                    return BadRequest("Credenciales inválidas.");
+                return Ok(new { token });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Solicitud de login con credenciales.
+        /// </summary>
+        public class LoginRequest
+        {
+            /// <summary>
+            /// Nombre de usuario.
+            /// </summary>
+            public string Username { get; set; }
+
+            /// <summary>
+            /// Contraseña (DNI).
+            /// </summary>
+            public string Password { get; set; }
+        }
+    }
+}
+
+namespace RapiFirma.Controllers
+{
+    using Microsoft.AspNetCore.Authorization;
+    using Microsoft.AspNetCore.Mvc;
+    using RapiFirma.Application.DTOs;
+    //using RapiFirma.Domain.Entities;
+    using RapiFirma.Domain.Interfaces;
+    using System;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+
+    /// <summary>
+    /// Controlador para operaciones de gestión de documentos.
+    /// </summary>
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize]
+    public class DocumentsController : ControllerBase
+    {
+        private readonly IDocumentService _documentService;
+        private readonly IUserRepository _userRepository;
+
+        public DocumentsController(IDocumentService documentService, IUserRepository userRepository)
+        {
+            _documentService = documentService ?? throw new ArgumentNullException(nameof(documentService));
+            _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
+        }
+
+        [HttpPost("upload")]
+        [ProducesResponseType(StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Upload([FromBody] UploadDocumentRequest request)
+        {
+            try
+            {
+                var document = await _documentService.UploadDocumentAsync(request.NombrePDF, request.DestinatarioID, request.PdfData);
+                var remitente = await _userRepository.GetByIdAsync(document.RemitenteID);
+                var destinatario = await _userRepository.GetByIdAsync(document.DestinatarioID);
+                var reenviadoPor = document.ReenviadoPorID.HasValue ? await _userRepository.GetByIdAsync(document.ReenviadoPorID.Value) : null;
+                var documentDto = new DocumentDto
+                {
+                    Id = document.Id,
+                    NombrePDF = document.NombrePDF,
+                    RemitenteID = document.RemitenteID,
+                    RemitenteNombre = remitente != null ? $"{remitente.Nombres} {remitente.Apellidos}" : null,
+                    RemitenteTipo = remitente?.Tipo,
+                    DestinatarioID = document.DestinatarioID,
+                    DestinatarioNombre = destinatario != null ? $"{destinatario.Nombres} {destinatario.Apellidos}" : null,
+                    DestinatarioTipo = destinatario?.Tipo,
+                    ReenviadoPorID = document.ReenviadoPorID,
+                    ReenviadoPorNombre = reenviadoPor != null ? $"{reenviadoPor.Nombres} {reenviadoPor.Apellidos}" : null,
+                    Estado = document.Estado,
+                    FechaEnvio = document.FechaEnvio,
+                    FechaReenvio = document.FechaReenvio,
+                    FechaFirma = document.FechaFirma,
+                    IsDeleted = document.IsDeleted
+                };
+                return CreatedAtAction(nameof(GetById), new { id = document.Id }, documentDto);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("sign/{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<IActionResult> Sign(int id, [FromBody] SignDocumentRequest request)
+        {
+            try
+            {
+                var document = await _documentService.SignDocumentAsync(id, request.SignedPdfData);
+                var remitente = await _userRepository.GetByIdAsync(document.RemitenteID);
+                var destinatario = await _userRepository.GetByIdAsync(document.DestinatarioID);
+                var reenviadoPor = document.ReenviadoPorID.HasValue ? await _userRepository.GetByIdAsync(document.ReenviadoPorID.Value) : null;
+                var documentDto = new DocumentDto
+                {
+                    Id = document.Id,
+                    NombrePDF = document.NombrePDF,
+                    RemitenteID = document.RemitenteID,
+                    RemitenteNombre = remitente != null ? $"{remitente.Nombres} {remitente.Apellidos}" : null,
+                    RemitenteTipo = remitente?.Tipo,
+                    DestinatarioID = document.DestinatarioID,
+                    DestinatarioNombre = destinatario != null ? $"{destinatario.Nombres} {destinatario.Apellidos}" : null,
+                    DestinatarioTipo = destinatario?.Tipo,
+                    ReenviadoPorID = document.ReenviadoPorID,
+                    ReenviadoPorNombre = reenviadoPor != null ? $"{reenviadoPor.Nombres} {reenviadoPor.Apellidos}" : null,
+                    Estado = document.Estado,
+                    FechaEnvio = document.FechaEnvio,
+                    FechaReenvio = document.FechaReenvio,
+                    FechaFirma = document.FechaFirma,
+                    IsDeleted = document.IsDeleted
+                };
+                return Ok(documentDto);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("send/{id}")]
+        [ProducesResponseType(StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Send(int id, [FromBody] SendDocumentRequest request)
+        {
+            try
+            {
+                var document = await _documentService.SendDocumentAsync(id, request.NewRecipientId);
+                var remitente = await _userRepository.GetByIdAsync(document.RemitenteID);
+                var destinatario = await _userRepository.GetByIdAsync(document.DestinatarioID);
+                var reenviadoPor = document.ReenviadoPorID.HasValue ? await _userRepository.GetByIdAsync(document.ReenviadoPorID.Value) : null;
+                var documentDto = new DocumentDto
+                {
+                    Id = document.Id,
+                    NombrePDF = document.NombrePDF,
+                    RemitenteID = document.RemitenteID,
+                    RemitenteNombre = remitente != null ? $"{remitente.Nombres} {remitente.Apellidos}" : null,
+                    RemitenteTipo = remitente?.Tipo,
+                    DestinatarioID = document.DestinatarioID,
+                    DestinatarioNombre = destinatario != null ? $"{destinatario.Nombres} {destinatario.Apellidos}" : null,
+                    DestinatarioTipo = destinatario?.Tipo,
+                    ReenviadoPorID = document.ReenviadoPorID,
+                    ReenviadoPorNombre = reenviadoPor != null ? $"{reenviadoPor.Nombres} {reenviadoPor.Apellidos}" : null,
+                    Estado = document.Estado,
+                    FechaEnvio = document.FechaEnvio,
+                    FechaReenvio = document.FechaReenvio,
+                    FechaFirma = document.FechaFirma,
+                    IsDeleted = document.IsDeleted
+                };
+                return CreatedAtAction(nameof(GetById), new { id = document.Id }, documentDto);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("download/{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<IActionResult> Download(int id)
+        {
+            try
+            {
+                var pdfData = await _documentService.DownloadDocumentAsync(id);
+                return File(pdfData, "application/pdf", $"document_{id}.pdf");
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            }
+        }
+
+        [HttpGet("user/{userId}/{received}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<IActionResult> GetByUser(int userId, bool received, [FromQuery] string nombrePdf = null, [FromQuery] string estado = null, [FromQuery] DateTime? fechaInicio = null, [FromQuery] DateTime? fechaFin = null)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Usuario no autenticado o identificador inválido." });
+
+                var user = await _userRepository.GetByIdAsync(currentUserId);
+                if (user == null || user.IsDeleted)
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Usuario no encontrado o eliminado." });
+
+                if (userId != currentUserId && user.Rol?.Nombre != "Admin")
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Solo puedes consultar tus propios documentos o como administrador." });
+
+                var documents = await _documentService.GetDocumentsByUserAsync(userId, received, nombrePdf, estado, fechaInicio, fechaFin);
+                var documentDtos = new List<DocumentDto>();
+                foreach (var d in documents)
+                {
+                    var remitente = await _userRepository.GetByIdAsync(d.RemitenteID);
+                    var destinatario = await _userRepository.GetByIdAsync(d.DestinatarioID);
+                    var reenviadoPor = d.ReenviadoPorID.HasValue ? await _userRepository.GetByIdAsync(d.ReenviadoPorID.Value) : null;
+                    documentDtos.Add(new DocumentDto
+                    {
+                        Id = d.Id,
+                        NombrePDF = d.NombrePDF,
+                        RemitenteID = d.RemitenteID,
+                        RemitenteNombre = remitente != null ? $"{remitente.Nombres} {remitente.Apellidos}" : null,
+                        RemitenteTipo = remitente?.Tipo,
+                        DestinatarioID = d.DestinatarioID,
+                        DestinatarioNombre = destinatario != null ? $"{destinatario.Nombres} {destinatario.Apellidos}" : null,
+                        DestinatarioTipo = destinatario?.Tipo,
+                        ReenviadoPorID = d.ReenviadoPorID,
+                        ReenviadoPorNombre = reenviadoPor != null ? $"{reenviadoPor.Nombres} {reenviadoPor.Apellidos}" : null,
+                        Estado = d.Estado,
+                        FechaEnvio = d.FechaEnvio,
+                        FechaReenvio = d.FechaReenvio,
+                        FechaFirma = d.FechaFirma,
+                        IsDeleted = d.IsDeleted
+                    });
+                }
+                return Ok(documentDtos);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<IActionResult> GetById(int id)
+        {
+            try
+            {
+                var document = await _documentService.GetByIdAsync(id);
+                if (document == null || document.IsDeleted)
+                    return NotFound("Documento no encontrado o eliminado.");
+
+                // Obtener userId del JWT
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Usuario no autenticado o identificador inválido." });
+
+                var user = await _userRepository.GetByIdAsync(currentUserId);
+                if (user == null || user.IsDeleted)
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Usuario no encontrado o eliminado." });
+
+                // Chequeo de acceso: Solo remitente, destinatario o Admin
+                if (document.RemitenteID != currentUserId && document.DestinatarioID != currentUserId && (user.Rol?.Nombre != "Admin"))
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "No tienes permiso para acceder a este documento." });
+
+                // Mapear a DTO (igual que antes)
+                var remitente = await _userRepository.GetByIdAsync(document.RemitenteID);
+                var destinatario = await _userRepository.GetByIdAsync(document.DestinatarioID);
+                var reenviadoPor = document.ReenviadoPorID.HasValue ? await _userRepository.GetByIdAsync(document.ReenviadoPorID.Value) : null;
+                var documentDto = new DocumentDto
+                {
+                    Id = document.Id,
+                    NombrePDF = document.NombrePDF,
+                    RemitenteID = document.RemitenteID,
+                    RemitenteNombre = remitente != null ? $"{remitente.Nombres} {remitente.Apellidos}" : null,
+                    RemitenteTipo = remitente?.Tipo,
+                    DestinatarioID = document.DestinatarioID,
+                    DestinatarioNombre = destinatario != null ? $"{destinatario.Nombres} {destinatario.Apellidos}" : null,
+                    DestinatarioTipo = destinatario?.Tipo,
+                    ReenviadoPorID = document.ReenviadoPorID,
+                    ReenviadoPorNombre = reenviadoPor != null ? $"{reenviadoPor.Nombres} {reenviadoPor.Apellidos}" : null,
+                    Estado = document.Estado,
+                    FechaEnvio = document.FechaEnvio,
+                    FechaReenvio = document.FechaReenvio,
+                    FechaFirma = document.FechaFirma,
+                    IsDeleted = document.IsDeleted
+                };
+                return Ok(documentDto);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpDelete("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<IActionResult> Delete(int id)
+        {
+            try
+            {
+                await _documentService.DeleteDocumentAsync(id);
+                return Ok();
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            }
+        }
+
+        [HttpPatch("update/{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateDocumentRequest request)
+        {
+            try
+            {
+                var document = await _documentService.UpdateSignedDocumentAsync(id, request.SignedPdfData);
+                var remitente = await _userRepository.GetByIdAsync(document.RemitenteID);
+                var destinatario = await _userRepository.GetByIdAsync(document.DestinatarioID);
+                var reenviadoPor = document.ReenviadoPorID.HasValue ? await _userRepository.GetByIdAsync(document.ReenviadoPorID.Value) : null;
+                var documentDto = new DocumentDto
+                {
+                    Id = document.Id,
+                    NombrePDF = document.NombrePDF,
+                    RemitenteID = document.RemitenteID,
+                    RemitenteNombre = remitente != null ? $"{remitente.Nombres} {remitente.Apellidos}" : null,
+                    RemitenteTipo = remitente?.Tipo,
+                    DestinatarioID = document.DestinatarioID,
+                    DestinatarioNombre = destinatario != null ? $"{destinatario.Nombres} {destinatario.Apellidos}" : null,
+                    DestinatarioTipo = destinatario?.Tipo,
+                    ReenviadoPorID = document.ReenviadoPorID,
+                    ReenviadoPorNombre = reenviadoPor != null ? $"{reenviadoPor.Nombres} {reenviadoPor.Apellidos}" : null,
+                    Estado = document.Estado,
+                    FechaEnvio = document.FechaEnvio,
+                    FechaReenvio = document.FechaReenvio,
+                    FechaFirma = document.FechaFirma,
+                    IsDeleted = document.IsDeleted
+                };
+                return Ok(documentDto);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Lista todos los documentos (solo Admin). Soporta filtros por nombre, estado ("pendiente" o "firmado"), fechas y eliminados.
+        /// Fechas aplican a FechaEnvio (pendientes) o FechaFirma (firmados) según estado especificado.
+        /// </summary>
+        /// <param name="nombrePdf">Filtro opcional por nombre del PDF (contiene, case-insensitive).</param>
+        /// <param name="estado">Filtro opcional: "pendiente" o "firmado".</param>
+        /// <param name="fechaInicio">Filtro opcional: Fecha inicial (UTC, aplica a FechaEnvio o FechaFirma).</param>
+        /// <param name="fechaFin">Filtro opcional: Fecha final (UTC, aplica a FechaEnvio o FechaFirma).</param>
+        /// <param name="includeDeleted">Incluir documentos eliminados lógicamente (default: false).</param>
+        /// <returns>Lista de documentos en formato DocumentDto.</returns>
+        /// <response code="200">Lista de documentos filtrados.</response>
+        /// <response code="400">Filtros inválidos (e.g., estado no permitido, fechas incoherentes).</response>
+        /// <response code="403">Usuario no autenticado o no es Admin.</response>
+        /// <response code="500">Error interno del servidor.</response>
+        [HttpGet]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetAll([FromQuery] string nombrePdf = null, [FromQuery] string estado = null, [FromQuery] DateTime? fechaInicio = null, [FromQuery] DateTime? fechaFin = null, [FromQuery] bool includeDeleted = false)
+        {
+            try
+            {
+                // Validaciones explícitas de filtros
+                if (!string.IsNullOrEmpty(estado) && !string.Equals(estado, "pendiente", StringComparison.OrdinalIgnoreCase) && !string.Equals(estado, "firmado", StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(new { message = "El estado debe ser 'pendiente' o 'firmado'." });
+                }
+
+                if (fechaInicio.HasValue && fechaFin.HasValue && fechaInicio > fechaFin)
+                {
+                    return BadRequest(new { message = "La fecha de inicio no puede ser posterior a la fecha de fin." });
+                }
+
+                // Normalizar estado a minúsculas para consistencia en service/repositorio
+                estado = estado?.ToLowerInvariant();
+
+                // Verificar que el usuario es Admin
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int currentUserId))
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Usuario no autenticado o identificador inválido." });
+
+                var user = await _userRepository.GetByIdAsync(currentUserId);
+                if (user == null || user.IsDeleted || user.Rol?.Nombre != "Admin")
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "Solo los administradores pueden listar todos los documentos." });
+
+                // Obtener documentos con filtros (retorna DocumentDto directamente desde servicio)
+                var documentDtos = await _documentService.GetAllDocumentsAsync(nombrePdf, estado, fechaInicio, fechaFin, includeDeleted);
+
+                return Ok(documentDtos);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Ocurrió un error al listar los documentos." });
+            }
+        }
+        public class UploadDocumentRequest
+        {
+            /// <summary>
+            /// Nombre del archivo PDF.
+            /// </summary>
+            public string NombrePDF { get; set; }
+
+            /// <summary>
+            /// Identificador del destinatario.
+            /// </summary>
+            public int DestinatarioID { get; set; }
+
+            /// <summary>
+            /// Datos binarios del PDF.
+            /// </summary>
+            public byte[] PdfData { get; set; }
+        }
+
+        public class SignDocumentRequest
+        {
+            /// <summary>
+            /// Datos binarios del PDF firmado generado por Firma ONPE.
+            /// </summary>
+            public byte[] SignedPdfData { get; set; }
+        }
+
+        public class SendDocumentRequest
+        {
+            /// <summary>
+            /// Identificador del nuevo destinatario.
+            /// </summary>
+            public int NewRecipientId { get; set; }
+        }
+
+        public class UpdateDocumentRequest
+        {
+            /// <summary>
+            /// Datos binarios del PDF firmado.
+            /// </summary>
+            public byte[] SignedPdfData { get; set; }
+        }
+    }
+}   
+
+namespace RapiFirma.Controllers
+{
+    using Microsoft.AspNetCore.Authorization;
+    using Microsoft.AspNetCore.Mvc;
+    using RapiFirma.Application.DTOs;
+    using RapiFirma.Domain.Entities;
+    using RapiFirma.Domain.Interfaces;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+    using Microsoft.Extensions.Logging;
+
+    [Route("api/[controller]")]
+    [ApiController]
+    [Authorize]
+    public class UsersController : ControllerBase
+    {
+        private readonly IUserService _userService;
+        private readonly ILogger<UsersController> _logger;
+
+        public UsersController(IUserService userService, ILogger<UsersController> logger)
+        {
+            _userService = userService ?? throw new ArgumentNullException(nameof(userService));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        [HttpGet]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetAll()
+        {
+            var users = await _userService.GetAllUsersAsync();
+            var userDtos = users.Select(u => new UserDto
+            {
+                Id = u.Id,
+                Dni = u.Dni,
+                Nombres = u.Nombres,
+                Apellidos = u.Apellidos,
+                Username = u.Username,
+                CargoId = u.CargoId,
+                RolId = u.RolId,
+                Tipo = u.Tipo,
+                IsDeleted = u.IsDeleted
+            });
+            return Ok(userDtos);
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Create([FromBody] CreateUserRequest request)
+        {
+            try
+            {
+                var user = await _userService.CreateUserAsync(request.Dni, request.Nombres, request.Apellidos, request.CargoId, request.RolId, request.Tipo);
+                var userDto = new UserDto
+                {
+                    Id = user.Id,
+                    Dni = user.Dni,
+                    Nombres = user.Nombres,
+                    Apellidos = user.Apellidos,
+                    Username = user.Username,
+                    CargoId = user.CargoId,
+                    RolId = user.RolId,
+                    Tipo = user.Tipo,
+                    IsDeleted = user.IsDeleted
+                };
+                return CreatedAtAction(nameof(GetAll), new { id = user.Id }, userDto);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+       
+
+        /// <summary>
+        /// Busca usuarios activos por nombre o apellidos para autocompletado.
+        /// </summary>
+        /// <param name="query">Término de búsqueda (coincide con nombres o apellidos).</param>
+        /// <returns>Lista de usuarios con ID y nombre completo.</returns>
+        /// <response code="200">Devuelve la lista de usuarios coincidentes.</response>
+        /// <response code="400">Si el término de búsqueda es inválido.</response>
+        [HttpGet("search")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Search([FromQuery] string query)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(query))
+                {
+                    _logger.LogWarning("Search query is empty or invalid.");
+                    return BadRequest("El término de búsqueda es requerido.");
+                }
+
+                var users = await _userService.GetAllUsersAsync();
+                var filteredUsers = users
+                    .Where(u => $"{u.Nombres} {u.Apellidos}".ToLower().Contains(query.ToLower()))
+                    .Select(u => new
+                    {
+                        u.Id,
+                        FullName = $"{u.Nombres} {u.Apellidos}"
+                    })
+                    .ToList();
+
+                _logger.LogInformation("Found {Count} users matching query '{Query}'", filteredUsers.Count, query);
+                return Ok(filteredUsers);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error while searching users with query '{Query}'", query);
+                return StatusCode(StatusCodes.Status500InternalServerError, "Ocurrió un error al buscar usuarios.");
+            }
+        }
+
+        [HttpGet("list")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetAll([FromQuery] bool includeDeleted = false)
+        {
+            var users = await _userService.GetAllUsersAsync(includeDeleted);
+            var userDtos = users.Select(u => new UserDto
+            {
+                Id = u.Id,
+                Dni = u.Dni,
+                Nombres = u.Nombres,
+                Apellidos = u.Apellidos,
+                Username = u.Username,
+                CargoId = u.CargoId,
+                RolId = u.RolId,
+                Tipo = u.Tipo,
+                IsDeleted = u.IsDeleted,
+                Estado = u.IsDeleted ? "Desactivado" : "Activo"
+            });
+            return Ok(userDtos);
+        }
+
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateUserRequest request)
+        {
+            try
+            {
+                var user = await _userService.UpdateUserAsync(id, request.Dni, request.Nombres, request.Apellidos, request.CargoId, request.RolId, request.Tipo, request.NewUsername);
+
+                // Map to DTO
+                var userDto = new UserDto
+                {
+                    Id = user.Id,
+                    Dni = user.Dni,
+                    Nombres = user.Nombres,
+                    Apellidos = user.Apellidos,
+                    Username = user.Username,
+                    CargoId = user.CargoId,
+                    RolId = user.RolId,
+                    Tipo = user.Tipo,
+                    IsDeleted = user.IsDeleted,
+                    Estado = user.IsDeleted ? "Desactivado" : "Activo"
+                };
+
+                return Ok(userDto);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> Delete(int id, [FromQuery] bool hard = false)
+        {
+            try
+            {
+                if (hard)
+                    await _userService.HardDeleteUserAsync(id);
+                else
+                    await _userService.DeleteUserAsync(id);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("me")]
+        [Authorize]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetCurrentUser()
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                    return Unauthorized(new { message = "Usuario no autenticado o identificador inválido." });
+
+                var user = await _userService.GetByIdAsync(userId);
+                if (user == null || user.IsDeleted)
+                    return NotFound(new { message = "Usuario no encontrado o eliminado." });
+
+                var userDto = new UserDto
+                {
+                    Id = user.Id,
+                    Dni = user.Dni,
+                    Nombres = user.Nombres,
+                    Apellidos = user.Apellidos,
+                    Username = user.Username,
+                    CargoId = user.CargoId,
+                    RolId = user.RolId,
+                    Tipo = user.Tipo,
+                    IsDeleted = user.IsDeleted,
+                    Estado = user.IsDeleted ? "Desactivado" : "Activo"
+                };
+                return Ok(userDto);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        public class UpdateUserRequest
+        {
+            public string Dni { get; set; }
+            public string Nombres { get; set; }
+            public string Apellidos { get; set; }
+            public int? CargoId { get; set; }
+            public int RolId { get; set; }
+            public string Tipo { get; set; }
+            public string NewUsername { get; set; }
+        }
+
+        public class CreateUserRequest
+        {
+            public string Dni { get; set; }
+            public string Nombres { get; set; }
+            public string Apellidos { get; set; }
+            public int? CargoId { get; set; }
+            public int RolId { get; set; }
+            public string Tipo { get; set; }
+        }
+    }
+}
+
+//appsettings.json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Database=RapiFirma;Username=postgres;Password=YourSecurePassword"
+  },
+  "Jwt": {
+    "Key": "YourSuperSecretKey1234567890",
+    "Issuer": "RapiFirmaIssuer",
+    "Audience": "RapiFirmaAudience"
+  },
+  "Hangfire": {
+    "DashboardUsername": "admin",
+    "DashboardPassword": "admin123"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "RapiFirma.Application.Services.UserService": "Information",
+      "RapiFirma.Controllers.UsersController": "Information"
+    }
+  },
+  "AllowedHosts": "*"
+}
+
+//appsettings.Developmen.json
+
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Database=RapiFirma;Username=postgres;Password=root"
+  },
+  "Jwt": {
+    "Key": "YourActualSuperSecretKey1234567891011",
+    "Issuer": "RapiFirmaIssuer",
+    "Audience": "RapiFirmaAudience"
+  },
+  "Hangfire": {
+    "DashboardUsername": "admin",
+    "DashboardPassword": "admin123"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "RapiFirma.Application.Services.UserService": "Information",
+      "RapiFirma.Controllers.UsersController": "Information"
+    }
+  }
+}
+
+//Program.cs
+using Hangfire;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using RapiFirma.Application.Services;
+using RapiFirma.Domain.Interfaces;
+using RapiFirma.Infrastructure.Authorization;
+using RapiFirma.Infrastructure.Jobs;
+using RapiFirma.Infrastructure.Persistence;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddCors(o =>
+{
+    o.AddPolicy("FrontWithCreds", p =>
+        p.WithOrigins("http://localhost:5173")
+         .AllowAnyMethod()
+         .AllowAnyHeader()
+         .AllowCredentials());       
+});
+
+// Configurar la cadena de configuración
+builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+                     .AddEnvironmentVariables();
+
+// Agregar logging con filtros específicos para UserService y UsersController
+builder.Services.AddLogging(logging =>
+{
+    logging.AddConsole();
+    logging.AddFilter("RapiFirma.Application.Services.UserService", LogLevel.Information);
+    logging.AddFilter("RapiFirma.Controllers.UsersController", LogLevel.Information);
+});
+
+// Agregar servicios al contenedor
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// Registrar DbContext para PostgreSQL
+builder.Services.AddDbContext<RapiFirmaDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Registrar repositorios
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
+builder.Services.AddScoped<ICargoRepository, CargoRepository>();
+builder.Services.AddScoped<IRolRepository, RolRepository>();
+
+// Registrar servicios
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+
+// Registrar autenticación JWT
+builder.Services.AddAuthentication("Bearer")
+    .AddJwtBearer("Bearer", options =>
+    {
+        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
+                System.Text.Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
+            ClockSkew = TimeSpan.Zero // Expiración exacta a 10 minutos
+        };
+    });
+
+
+
+// Registrar Hangfire para jobs
+builder.Services.AddHangfire(configuration => configuration
+    .UseStorage(new Hangfire.PostgreSql.PostgreSqlStorage(builder.Configuration.GetConnectionString("DefaultConnection"))));
+builder.Services.AddHangfireServer();
+
+// Agregar acceso al contexto HTTP
+builder.Services.AddHttpContextAccessor();
+
+// Configurar el pipeline HTTP
+var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseCors("FrontWithCreds");
+app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Configurar Hangfire Dashboard con autorización personalizada
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireDashboardAuthorizationFilter(builder.Configuration) }
+});
+
+RecurringJob.AddOrUpdate<DocumentCleanupJob>("cleanup-expired-docs", job => job.RunAsync(), Cron.Daily);  // Ejecuta diario
+    
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        await context.Response.WriteAsync("Ocurrió un error en el servidor.");
+    });
+});
+
+app.MapControllers();
+
+app.Run();
+//RapiFirma.cspj
+
+
+
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+	    <TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.21" />
+    <PackageReference Include="Hangfire.PostgreSql" Version="1.20.12" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.19" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.3.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.19" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.19">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.19">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.4" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+		<Folder Include="Middleware\" />
+		<Folder Include="Test\" />
+   </ItemGroup>
+</Project>
+
+
+/////////////////////////////////////
+
+ Eh inyectado estos datos mediante una migración send 
+Users
+"Id"	"Dni"	"Nombres"	"Apellidos"	"Username"	"CargoId"	"RolId"	"Tipo"	"IsDeleted"
+1	"12345678"	"Juan"	"Perez Lopez"	"juanpl"	1	1		false
+2	"87654321"	"Maria"	"Gonzalez Ruiz"	"mariagr"	2	1		false
+3	"11223344"	"Pedro"	"Jimenez Soto"	"pedrojs"	1	1		false
+4	"75466159"	"Ana"	"Garcia"	"anag"	2	2	"Funcionario"	false
+5	"15344678"	"Bella"	"Porche"	"bellap"	2	2	"Funcionario"	false
+6	"87654322"	"Catalina"	"Billa"	"catalinab"	1	2	"Normal"	false
+7	"87664331"	"Jeremy"	"Paucar Meneses"	"jeremypm"	1	2	"Normal"	false
+8	"88888888"	"Alion"	"Paucar Meneses"	"alionpm"	1	2	"Normal"	false
+
+
+Cargos
+1	"Gerente"	false
+2	"Asistente"	false
+
+Roles   
+
+1	"Admin"	false
+2	"User"	false
+
