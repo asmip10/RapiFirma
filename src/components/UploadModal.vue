@@ -94,8 +94,8 @@ const submitting = ref(false);
 function prettySize(bytes) {
   if (!bytes && bytes !== 0) return "";
   const units = ["B", "KB", "MB", "GB"];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(2048)), units.length - 1);
-  const val = bytes / Math.pow(2048, i);
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const val = bytes / Math.pow(1024, i);
   return `${val.toFixed(1)} ${units[i]}`;
 }
 
@@ -113,11 +113,11 @@ function handleFileUpload(e) {
     fileError.value = "Selecciona un archivo PDF válido.";
     return;
   }
-  // (Opcional) límite 10MB como referencia del backend
-  const TEN_MB = 10 * 1024 * 1024;
-  if (file.size > TEN_MB) {
+  // (Opcional) límite 20MB como referencia del backend
+  const MAX_20_MB = 20 * 1024 * 1024;
+  if (file.size > MAX_20_MB) {
     selectedFile.value = null;
-    fileError.value = "El archivo supera el límite de 10MB.";
+    fileError.value = "El archivo supera el límite de 20MB.";
     return;
   }
   selectedFile.value = file;
