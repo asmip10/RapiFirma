@@ -346,6 +346,11 @@ namespace RapiFirma.Domain.Entities
         [Required]
         public string Username { get; set; }
 
+
+        // NUEVO: hash del password
+        [Required]
+        public string PasswordHash { get; private set; }
+
         /// <summary>
         /// Identificador del cargo asociado (nullable).
         /// </summary>
@@ -397,29 +402,27 @@ namespace RapiFirma.Domain.Entities
         /// <param name="rolId">Identificador del rol.</param>
         /// <param name="tipo">Tipo de usuario (nullable, solo para rol User).</param>
         /// <exception cref="ArgumentException">Si las validaciones fallan.</exception>
-        public User(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null)
+        // Constructor actualizado: recibe password plano
+        public User(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo, string plainPassword)
         {
-            // Validar DNI
             if (string.IsNullOrWhiteSpace(dni) || dni.Length != 8 || !int.TryParse(dni, out _))
                 throw new ArgumentException("El DNI debe ser un número de 8 dígitos.");
-
-            // Validar nombres y apellidos
             if (string.IsNullOrWhiteSpace(nombres) || string.IsNullOrWhiteSpace(apellidos))
                 throw new ArgumentException("Nombres y apellidos son requeridos.");
+            if (string.IsNullOrWhiteSpace(plainPassword) || plainPassword.Length < 6)
+                throw new ArgumentException("El password es requerido y debe tener al menos 6 caracteres.");
 
-            // Generar username
-            Username = GenerateUsername(nombres, apellidos);
-
-            // Asignar valores
             Dni = dni;
             Nombres = nombres;
             Apellidos = apellidos;
             CargoId = cargoId;
             RolId = rolId;
             Tipo = ValidateAndSetTipo(rolId, tipo);
+
+            Username = dni; // clave: usar DNI como username
+            SetPassword(plainPassword);
+
             IsDeleted = false;
-            DocumentsEnviados = new List<Document>();
-            DocumentsRecibidos = new List<Document>();
         }
 
         private User()
@@ -427,6 +430,13 @@ namespace RapiFirma.Domain.Entities
             // Constructor por defecto para EF Core
             DocumentsEnviados = new List<Document>();
             DocumentsRecibidos = new List<Document>();
+        }
+
+        public void SetPassword(string newPlainPassword)
+        {
+            if (string.IsNullOrWhiteSpace(newPlainPassword) || newPlainPassword.Length < 6)
+                throw new ArgumentException("El password es requerido y debe tener al menos 6 caracteres.");
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPlainPassword);
         }
 
         /// <summary>
@@ -472,6 +482,9 @@ namespace RapiFirma.Domain.Entities
             IsDeleted = true;
         }
 
+
+
+
         /// <summary>
         /// Actualiza las propiedades del usuario con validaciones y regenera Username.
         /// </summary>
@@ -481,32 +494,23 @@ namespace RapiFirma.Domain.Entities
         /// <param name="cargoId">Nuevo cargo ID (nullable).</param>
         /// <param name="rolId">Nuevo rol ID.</param>
         /// <param name="tipo">Nuevo tipo (Funcionario/Normal para rol User).</param>
-        public void Update(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null, string newUsername = null)
+        public void Update(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null, string newPlainPassword = null)
         {
-            // Validar DNI
             if (string.IsNullOrWhiteSpace(dni) || dni.Length != 8 || !int.TryParse(dni, out _))
                 throw new ArgumentException("El DNI debe ser un número de 8 dígitos.");
-
-            // Validar nombres y apellidos
             if (string.IsNullOrWhiteSpace(nombres) || string.IsNullOrWhiteSpace(apellidos))
                 throw new ArgumentException("Nombres y apellidos son requeridos.");
 
             Dni = dni;
+            Username = dni; // mantener la regla
             Nombres = nombres;
             Apellidos = apellidos;
             CargoId = cargoId;
             RolId = rolId;
             Tipo = ValidateAndSetTipo(rolId, tipo);
 
-            // Regenera username si no se proporciona uno nuevo
-            if (string.IsNullOrWhiteSpace(newUsername))
-            {
-                Username = GenerateUsername(nombres, apellidos);
-            }
-            else
-            {
-                Username = newUsername.ToLower();  // Normaliza a minúsculas
-            }
+            if (!string.IsNullOrWhiteSpace(newPlainPassword))
+                SetPassword(newPlainPassword);
         }
 
         /// <summary>
@@ -523,7 +527,6 @@ namespace RapiFirma.Domain.Entities
 }
 
 /Domain/Interfaces
-
 namespace RapiFirma.Domain.Interfaces
 {
     using System.Threading.Tasks;
@@ -845,7 +848,7 @@ namespace RapiFirma.Domain.Interfaces
         /// <param name="tipo">Tipo de usuario (nullable, "Funcionario" o "Normal" para rol User).</param>
         /// <returns>El usuario creado.</returns>
         /// <exception cref="ArgumentException">Si las validaciones fallan.</exception>
-        Task<User> CreateUserAsync(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null);
+        Task<User> CreateUserAsync(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null, string password = null);
 
         /// <summary>
         /// Actualiza un usuario existente con las propiedades especificadas, regenerando username si cambian nombres/apellidos.
@@ -859,7 +862,7 @@ namespace RapiFirma.Domain.Interfaces
         /// <param name="tipo">Nuevo tipo de usuario (nullable, "Funcionario" o "Normal" para rol User).</param>
         /// <returns>El usuario actualizado.</returns>
         /// <exception cref="ArgumentException">Si las validaciones fallan o el usuario no existe.</exception>
-        Task<User> UpdateUserAsync(int id, string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null, string newUsername = null);
+        Task<User> UpdateUserAsync(int id, string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null, string newPassword = null);
 
         /// <summary>
         /// Obtiene un usuario por su DNI.
@@ -910,6 +913,8 @@ namespace RapiFirma.Domain.Interfaces
 
 
         Task<User> GetByIdAsync(int id);
+
+        Task ResetPasswordAsync(int id, string newPassword);
     }
 }
 
@@ -949,11 +954,15 @@ namespace RapiFirma.Application.Services
             }
 
             var user = await _userRepository.GetByUsernameAsync(username);
-            if (user == null || user.Dni != password || user.IsDeleted || user.Rol == null)
-            {
-                _logger.LogWarning("Login failed for username: {username}", username);
+            // username = DNI; verificar hash
+            var ok = user != null
+                     && !user.IsDeleted
+                     && user.Rol != null
+                     && BCrypt.Net.BCrypt.Verify(password, user.PasswordHash);
+
+            if (!ok)
                 throw new ArgumentException("Credenciales inválidas o rol no asignado.");
-            }
+
 
             _logger.LogInformation("User {username} logged in with role {role}", username, user.Rol.Nombre);
 
@@ -1246,7 +1255,7 @@ namespace RapiFirma.Application.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public async Task<User> CreateUserAsync(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null)
+        public async Task<User> CreateUserAsync(string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null, string password = null)
         {
             if (await _userRepository.GetByDniAsync(dni) != null)
                 throw new ArgumentException("El DNI ya está en uso.");
@@ -1258,46 +1267,38 @@ namespace RapiFirma.Application.Services
             if (rol.Nombre != "Admin" && rol.Nombre != "User")
                 throw new ArgumentException("El rol debe ser 'Admin' o 'User'.");
 
-            if (rol.Nombre == "User" && !string.IsNullOrWhiteSpace(tipo))
-            {
-                if (tipo != "Funcionario" && tipo != "Normal")
-                    throw new ArgumentException("El tipo debe ser 'Funcionario' o 'Normal' para rol User.");
-            }
+            // password obligatorio y distinto al DNI (opcional)
+            if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
+                throw new ArgumentException("El password es requerido y debe tener al menos 6 caracteres.");
 
-            var user = new User(dni, nombres, apellidos, cargoId, rolId, tipo);
+            var user = new User(dni, nombres, apellidos, cargoId, rolId, tipo, password);
             return await _userRepository.AddAsync(user);
         }
 
-        public async Task<User> UpdateUserAsync(int id, string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null, string newUsername = null)
+        public async Task<User> UpdateUserAsync(int id, string dni, string nombres, string apellidos, int? cargoId, int rolId, string tipo = null, string newPassword = null)
         {
             var user = await _userRepository.GetByIdAsync(id);
-            if (user == null)
-                throw new ArgumentException("Usuario no encontrado.");
+            if (user == null) throw new ArgumentException("Usuario no encontrado.");
 
-            // Validar unicidad DNI si cambia
             if (user.Dni != dni && await _userRepository.GetByDniAsync(dni) != null)
                 throw new ArgumentException("El DNI ya está en uso.");
 
-            // Validar unicidad username si nuevo proporcionado y cambia
-            if (!string.IsNullOrWhiteSpace(newUsername) && user.Username != newUsername && await _userRepository.GetByUsernameAsync(newUsername) != null)
-                throw new ArgumentException("El username ya está en uso.");
-
-            // Validar rol con AsNoTracking para no trackear entidades
-            var roles = await _rolRepository.GetAllAsync();  // Asume AsNoTracking en repo
+            // Validar rol igual que en Create...
+            var roles = await _rolRepository.GetAllAsync();
             if (!roles.Any(r => r.Id == rolId))
                 throw new ArgumentException("El rol especificado no existe.");
-            var rol = roles.First(r => r.Id == rolId);  // No tracked, seguro
-            if (rol.Nombre != "Admin" && rol.Nombre != "User")
-                throw new ArgumentException("El rol debe ser 'Admin' o 'User'.");
 
-            if (rol.Nombre == "User" && !string.IsNullOrWhiteSpace(tipo) && tipo != "Funcionario" && tipo != "Normal")
-                throw new ArgumentException("El tipo debe ser 'Funcionario' o 'Normal' para rol User.");
-
-            user.Update(dni, nombres, apellidos, cargoId, rolId, tipo, newUsername);
-            _logger.LogInformation("User ID {Id} updated by Admin", id);
+            user.Update(dni, nombres, apellidos, cargoId, rolId, tipo, newPassword);
             return await _userRepository.UpdateAsync(user);
         }
 
+        public async Task ResetPasswordAsync(int id, string newPassword)
+        {
+            var user = await _userRepository.GetByIdAsync(id);
+            if (user == null) throw new ArgumentException("Usuario no encontrado.");
+            user.SetPassword(newPassword);
+            await _userRepository.UpdateAsync(user);
+        }
         public async Task<User> GetUserByDniAsync(string dni)
         {
             return await _userRepository.GetByDniAsync(dni);
@@ -2798,33 +2799,22 @@ namespace RapiFirma.Controllers
         [Authorize(Roles = "Admin")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> Create([FromBody] CreateUserRequest request)
+        public async Task<IActionResult> Create([FromBody] CreateUserRequest req)
         {
-            try
+            var user = await _userService.CreateUserAsync(req.Dni, req.Nombres, req.Apellidos, req.CargoId, req.RolId, req.Tipo, req.Password);
+            return Ok(new UserDto
             {
-                var user = await _userService.CreateUserAsync(request.Dni, request.Nombres, request.Apellidos, request.CargoId, request.RolId, request.Tipo);
-                var userDto = new UserDto
-                {
-                    Id = user.Id,
-                    Dni = user.Dni,
-                    Nombres = user.Nombres,
-                    Apellidos = user.Apellidos,
-                    Username = user.Username,
-                    CargoId = user.CargoId,
-                    RolId = user.RolId,
-                    Tipo = user.Tipo,
-                    IsDeleted = user.IsDeleted
-                };
-                return CreatedAtAction(nameof(GetAll), new { id = user.Id }, userDto);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(ex.Message);
-            }
+                Id = user.Id,
+                Dni = user.Dni,
+                Nombres = user.Nombres,
+                Apellidos = user.Apellidos,
+                Username = user.Username,
+                CargoId = user.CargoId,
+                RolId = user.RolId,
+                Tipo = user.Tipo,
+                IsDeleted = user.IsDeleted
+            });
         }
-
-       
-
         /// <summary>
         /// Busca usuarios activos por nombre o apellidos para autocompletado.
         /// </summary>
@@ -2892,9 +2882,17 @@ namespace RapiFirma.Controllers
         {
             try
             {
-                var user = await _userService.UpdateUserAsync(id, request.Dni, request.Nombres, request.Apellidos, request.CargoId, request.RolId, request.Tipo, request.NewUsername);
+                var user = await _userService.UpdateUserAsync(
+                    id,
+                    request.Dni,
+                    request.Nombres,
+                    request.Apellidos,
+                    request.CargoId,
+                    request.RolId,
+                    request.Tipo,
+                    newPassword: request.NewPassword // <--- antes era NewUsername
+                );
 
-                // Map to DTO
                 var userDto = new UserDto
                 {
                     Id = user.Id,
@@ -2976,6 +2974,38 @@ namespace RapiFirma.Controllers
             }
         }
 
+        [HttpPatch("{id}/restore")]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Restore(int id)
+        {
+            try
+            {
+                await _userService.RestoreUserAsync(id);
+
+                // Devuelve el usuario ya restaurado
+                var user = await _userService.GetByIdAsync(id);
+                var dto = new UserDto
+                {
+                    Id = user.Id,
+                    Dni = user.Dni,
+                    Nombres = user.Nombres,
+                    Apellidos = user.Apellidos,
+                    Username = user.Username,
+                    CargoId = user.CargoId,
+                    RolId = user.RolId,
+                    Tipo = user.Tipo,
+                    IsDeleted = user.IsDeleted,
+                    Estado = user.IsDeleted ? "Desactivado" : "Activo"
+                };
+                return Ok(dto);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
         public class UpdateUserRequest
         {
             public string Dni { get; set; }
@@ -2984,7 +3014,7 @@ namespace RapiFirma.Controllers
             public int? CargoId { get; set; }
             public int RolId { get; set; }
             public string Tipo { get; set; }
-            public string NewUsername { get; set; }
+            public string NewPassword { get; set; } // opcional
         }
 
         public class CreateUserRequest
@@ -2994,7 +3024,8 @@ namespace RapiFirma.Controllers
             public string Apellidos { get; set; }
             public int? CargoId { get; set; }
             public int RolId { get; set; }
-            public string Tipo { get; set; }
+            public string Tipo { get; set; } // "Funcionario"/"Normal" si RolId=2
+            public string Password { get; set; } // NUEVO (obligatorio)
         }
     }
 }
@@ -3233,17 +3264,36 @@ app.Run();
 /////////////////////////////////////
 
  Eh inyectado estos datos mediante una migración send 
-Users
-"Id"	"Dni"	"Nombres"	"Apellidos"	"Username"	"CargoId"	"RolId"	"Tipo"	"IsDeleted"
-1	"12345678"	"Juan"	"Perez Lopez"	"juanpl"	1	1		false
-2	"87654321"	"Maria"	"Gonzalez Ruiz"	"mariagr"	2	1		false
-3	"11223344"	"Pedro"	"Jimenez Soto"	"pedrojs"	1	1		false
-4	"75466159"	"Ana"	"Garcia"	"anag"	2	2	"Funcionario"	false
-5	"15344678"	"Bella"	"Porche"	"bellap"	2	2	"Funcionario"	false
-6	"87654322"	"Catalina"	"Billa"	"catalinab"	1	2	"Normal"	false
-7	"87664331"	"Jeremy"	"Paucar Meneses"	"jeremypm"	1	2	"Normal"	false
-8	"88888888"	"Alion"	"Paucar Meneses"	"alionpm"	1	2	"Normal"	false
 
+           var a1 = BCrypt.Net.BCrypt.HashPassword("Admin#1111");
+           var a2 = BCrypt.Net.BCrypt.HashPassword("Admin#2222");
+           var a3 = BCrypt.Net.BCrypt.HashPassword("Admin#3333");
+           var u1 = BCrypt.Net.BCrypt.HashPassword("User#4444");
+           var u2 = BCrypt.Net.BCrypt.HashPassword("User#5555");
+           var u3 = BCrypt.Net.BCrypt.HashPassword("User#6666");
+           var u4 = BCrypt.Net.BCrypt.HashPassword("Temp#2025"); 
+           // 3) Usuarios (Username = DNI)
+           // Columnas esperadas en Users: Id, Dni, Nombres, Apellidos, Username, PasswordHash, CargoId, RolId, Tipo, IsDeleted
+           migrationBuilder.InsertData(
+               table: "Users",
+               columns: new[]
+               {
+                   "Id","Dni","Nombres","Apellidos","Username","PasswordHash","CargoId","RolId","Tipo","IsDeleted"
+               },
+               values: new object[,]
+               {
+                   // --- Admins (RolId = 1) ---
+                   { 1, "11111111", "Juan",   "Perez Lopez",    "11111111", a1, 1, 1, null,          false },
+                   { 2, "22222222", "Maria",  "Gonzalez Ruiz",  "22222222", a2, 2, 1, null,          false },
+                   { 3, "33333333", "Pedro",  "Jimenez Soto",   "33333333", a3, 1, 1, null,          false },
+
+                   // --- Users (RolId = 2; Tipo requerido: Funcionario o Normal) ---
+                   { 4, "44444444", "Ana",    "Garcia",         "44444444", u1, 2, 2, "Funcionario", false },
+                   { 5, "55555555", "Bella",  "Porche",         "55555555", u2, 2, 2, "Funcionario", false },
+                   { 6, "66666666", "Jeremy", "Paucar Meneses", "66666666", u3, 1, 2, "Normal",      false },
+                   { 7, "77777777", "Carlos", "Ramos Vega",     "77777777", u4, 2, 2, "Normal",      false },
+               }
+           );
 
 Cargos
 1	"Gerente"	false
