@@ -1090,14 +1090,30 @@ namespace RapiFirma.Application.Services
             if (user == null || user.IsDeleted)
                 throw new UnauthorizedAccessException("Usuario no encontrado o eliminado.");
 
-            if (original.DestinatarioID != currentUserId && user.Rol?.Nombre != "Admin")
-                throw new UnauthorizedAccessException("Solo el destinatario o un administrador puede reenviar este documento.");
+            // ✅ Nuevo: también permite al remitente
+            var isAdmin = user.Rol?.Nombre == "Admin";
+            var isDestinatario = original.DestinatarioID == currentUserId;
+            var isRemitente = original.RemitenteID == currentUserId;
+            if (!(isAdmin || isDestinatario || isRemitente))
+                throw new UnauthorizedAccessException("Solo el remitente, destinatario o un administrador puede reenviar este documento.");
 
             var newRecipient = await _userRepository.GetByIdAsync(newRecipientId);
             if (newRecipient == null || newRecipient.IsDeleted)
                 throw new ArgumentException("Destinatario no encontrado o eliminado.");
 
-            var newDocument = new Document(original.NombrePDF, currentUserId, newRecipientId, original.PdfData, "pendiente", DateTime.UtcNow);
+            //  Nuevo: conservar Remitente original y auditar el reenvío
+            var now = DateTime.UtcNow;
+            var newDocument = new Document(
+                original.NombrePDF,
+                original.RemitenteID,               // mantiene al remitente original
+                newRecipientId,
+                original.PdfData,
+                "pendiente",
+                now,
+                reenviadoPorId: currentUserId,      // quién reenvía
+                fechaReenvio: now                   // cuándo reenvía
+            );
+
             return await _documentRepository.AddAsync(newDocument);
         }
 
@@ -3033,6 +3049,29 @@ namespace RapiFirma.Controllers
   }
 }
 
+//appsettings.Production.json   
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Database=RapiFirma;Username=postgres;Password=root"
+  },
+  "Jwt": {
+    "Key": "YourActualSuperSecretKey1234567891011",
+    "Issuer": "RapiFirmaIssuer",
+    "Audience": "RapiFirmaAudience"
+  },
+  "Hangfire": {
+    "DashboardUsername": "admin",
+    "DashboardPassword": "admin123"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "RapiFirma.Application.Services.UserService": "Information",
+      "RapiFirma.Controllers.UsersController": "Information"
+    }
+  }
+}
 //Program.cs
 using Hangfire;
 using Microsoft.EntityFrameworkCore;
