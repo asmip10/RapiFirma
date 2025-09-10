@@ -95,9 +95,6 @@ if (String(selectedUser.value.id) === String(myId)) {
   return;
 }
 
-  // 🚫 no te reenvíes a ti mismo
-const currentId = String(auth.user?.id ?? auth.user?.Id ?? "");
-
 try {
     submitting.value = true;
     await DocumentService.forward({ id: props.doc.id, newRecipientId: selectedUser.value.id });

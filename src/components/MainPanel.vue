@@ -52,12 +52,12 @@
           <option value="pendiente">Pendientes</option>
           <option value="firmado">Firmados</option>
         </select>
-        <input
+        <!-- <input
           v-model="docs.filters.fecha"
           @change="docs.fetchReceived"
           type="date"
           class="p-3 border border-gray-300 rounded-lg"
-        />
+        /> -->
       </div>
 
       <!-- Tabla -->
@@ -198,12 +198,12 @@
           <option value="pendiente">Pendientes</option>
           <option value="firmado">Firmados</option>
         </select>
-        <input
+        <!-- <input
           v-model="docs.filters.fechaSent"
           @change="docs.fetchSent"
           type="date"
           class="p-3 border border-gray-300 rounded-lg"
-        />
+        /> -->
       </div>
 
       <!-- Tabla -->
