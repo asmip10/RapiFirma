@@ -46,17 +46,15 @@
         <input v-model.trim="form.Apellidos" class="border rounded-lg px-3 py-2 w-full" required />
       </div>
 
-      <!-- Username editable -->
       <div class="md:col-span-2">
-        <label class="block text-sm">Username</label>
+        <label class="block text-sm">Nueva contraseña (opcional)</label>
         <input
-          v-model.trim="newUsername"
+          v-model.trim="form.NewPassword"
+          type="password"
           class="border rounded-lg px-3 py-2 w-full"
-          :placeholder="currentUsername || 'sin username'"
+          minlength="6"
         />
-        <p class="text-xs text-slate-500 mt-1">
-          Se enviará como <code>newUsername</code> solo si es distinto al actual.
-        </p>
+        <p class="text-xs text-slate-500 mt-1">Déjalo vacío para no cambiarla (mínimo 6 si se establece).</p>
       </div>
 
       <div>
@@ -69,9 +67,8 @@
       </div>
 
       <div>
-        <label class="block text-sm">Tipo (si Rol=User)</label>
-        <select v-model="form.Tipo" class="border rounded-lg px-3 py-2 w-full">
-          <option value="">—</option>
+        <label class="block text-sm">Rol</label>
+        <select v-model="form.Tipo" class="border rounded-lg px-3 py-2 w-full" required>
           <option>Funcionario</option>
           <option>Normal</option>
         </select>
@@ -112,6 +109,7 @@ const form = reactive({
   CargoId: 1,
   RolId: 2,  // 1=Admin (bloqueado), 2=User
   Tipo: "",
+  NewPassword: "",
 });
 
 const loaded = ref(false);
@@ -178,6 +176,12 @@ async function submit() {
     return;
   }
 
+  if (form.NewPassword && form.NewPassword.length < 6) {
+    errorMsg.value = "La nueva contraseña debe tener al menos 6 caracteres.";
+    error(errorMsg.value);
+    return;
+  }
+
   const payload = {
     dni: form.Dni,
     nombres: form.Nombres,
@@ -187,9 +191,8 @@ async function submit() {
     tipo: form.Tipo || "",
   };
 
-  const candidate = (newUsername.value ?? "").trim();
-  if (candidate && candidate !== (currentUsername.value ?? "").trim()) {
-    payload.newUsername = candidate;
+  if ((form.NewPassword ?? "").trim()) {
+    payload.newPassword = form.NewPassword.trim(); // ⬅️ se mapea en el service
   }
 
   try {

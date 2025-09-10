@@ -9,7 +9,7 @@ function buildUpdatePayload(dto = {}) {
     cargoId: dto.CargoId ?? dto.cargoId ?? null,
     rolId: dto.RolId ?? dto.rolId ?? 2,
     tipo: dto.Tipo ?? dto.tipo ?? null,
-    newUsername: dto.NewUsername ?? dto.newUsername ?? null,
+    newPassword: dto.NewPassword ?? dto.newPassword ?? null,
   };
 }
 
