@@ -109,5 +109,14 @@ export const useUsersStore = defineStore("users", {
       await UserService.remove(id, { hard });
       await this.fetch();
     },
+    async restore(id) {
+      // opcional: reglas de negocio (no restaurar Admin)
+      const current = this.items.find(x => String(x.id) === String(id));
+      if (current && (current.rol === "Admin" || current.rolId === 1)) {
+        throw new Error("Los usuarios con rol Admin no se pueden restaurar.");
+      }
+      await UserService.restore(id);
+      await this.fetch();
+    },  
   },
 });

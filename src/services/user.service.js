@@ -85,6 +85,10 @@ export const UserService = {
     }
   },
 
+  async restore(id) {
+    const { data } = await api.patch(`/api/users/${id}/restore`);
+    return data;
+  },
   async create(dto) {
     const payload = buildCreatePayload(dto);
     const { data } = await api.post("/api/users", payload);

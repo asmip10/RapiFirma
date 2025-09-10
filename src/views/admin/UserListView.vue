@@ -73,14 +73,17 @@
               <!-- No Admin: acciones con iconos -->
               <template v-else>
                 <div class="flex items-center gap-3">
+                  <!-- Editar solo si NO está eliminado -->
                   <router-link
+                    v-if="!u.isDeleted"
                     :to="{ name:'admin.users.edit', params:{ id: u.id } }"
                     title="Editar usuario"
                     class="text-blue-600 hover:text-blue-700"
                   >
                     <PencilIcon class="h-5 w-5 cursor-pointer inline" />
                   </router-link>
-
+                
+                  <!-- Eliminar (soft) si está activo -->
                   <button
                     v-if="!u.isDeleted"
                     @click="softDelete(u)"
@@ -89,9 +92,20 @@
                   >
                     <TrashIcon class="h-5 w-5 cursor-pointer inline" />
                   </button>
-
+                
+                  <!-- Restaurar si está eliminado -->
                   <button
-                    v-else
+                    v-if="u.isDeleted"
+                    @click="restoreUser(u)"
+                    title="Restaurar usuario"
+                    class="text-green-700 hover:text-green-800 font-semibold"
+                  >
+                    Restaurar
+                  </button>
+                
+                  <!-- Eliminar (hard) si está eliminado -->
+                  <button
+                    v-if="u.isDeleted"
                     @click="hardDelete(u)"
                     title="Eliminar definitivamente"
                     class="text-red-800 hover:text-red-900 font-semibold"
@@ -201,6 +215,15 @@ async function hardDelete(u) {
     success("Usuario eliminado definitivamente.");
   } catch (e) {
     error(e?.message || e?.response?.data?.message || "No se pudo eliminar definitivamente al usuario.");
+  }
+}
+async function restoreUser(u) {
+  if (!confirm(`¿Restaurar al usuario: ${u.fullName}?`)) return;
+  try {
+    await store.restore(u.id);
+    success("Usuario restaurado.");
+  } catch (e) {
+    error(e?.response?.data?.message || "No se pudo restaurar el usuario.");
   }
 }
 

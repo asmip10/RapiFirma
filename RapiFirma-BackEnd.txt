@@ -1937,10 +1937,16 @@ namespace RapiFirma.Infrastructure.Persistence
         public async Task<User> UpdateAsync(User entity)
         {
             if (entity == null) throw new ArgumentNullException(nameof(entity));
-            _logger.LogInformation("Attempting to update user ID {Id} with IsDeleted={IsDeleted}", entity.Id, entity.IsDeleted);
-            _context.Users.Update(entity);
+
+            // evita el conflicto “another instance with the same key is already being tracked”
+            var local = _context.Users.Local.FirstOrDefault(u => u.Id == entity.Id);
+            if (local != null)
+                _context.Entry(local).State = EntityState.Detached;
+
+            _context.Users.Attach(entity);
+            _context.Entry(entity).State = EntityState.Modified;
+
             await _context.SaveChangesAsync();
-            _logger.LogInformation("User ID {Id} updated successfully", entity.Id);
             return entity;
         }
 
@@ -1999,7 +2005,6 @@ namespace RapiFirma.Infrastructure.Persistence
         }
     }
 }
-
 
 //Infrastructure/Jobs
 
