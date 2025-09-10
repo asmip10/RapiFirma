@@ -203,7 +203,7 @@
           @change="docs.fetchSent"
           type="date"
           class="p-3 border border-gray-300 rounded-lg"
-        /> -->
+        /> -->v
       </div>
 
       <!-- Tabla -->

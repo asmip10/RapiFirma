@@ -21,6 +21,7 @@ function buildCreatePayload(dto = {}) {
     cargoId: dto.CargoId ?? dto.cargoId ?? null,
     rolId: dto.RolId ?? dto.rolId ?? 2,
     tipo: dto.Tipo ?? dto.tipo ?? null,
+    password: dto.Password ?? dto.password ?? "",
   };
 }
 

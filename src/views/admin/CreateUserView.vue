@@ -37,20 +37,22 @@
         <label class="block text-sm">Apellidos</label>
         <input v-model.trim="form.Apellidos" class="border rounded-lg px-3 py-2 w-full" required />
       </div>
+      <div class="md:col-span-2">
+        <label class="block text-sm">Contraseña</label>
+        <input
+          v-model.trim="form.Password"
+          type="password"
+          class="border rounded-lg px-3 py-2 w-full"
+          required
+          minlength="6"
+        />
+        <p class="text-xs text-slate-500 mt-1">Mínimo 6 caracteres.</p>
+      </div>
+
 
       <div>
         <label class="block text-sm">Rol</label>
-        <select v-model.number="form.RolId" class="border rounded-lg px-3 py-2 w-full">
-          <option :value="1" disabled>Admin (bloqueado)</option>
-          <option :value="2">User</option>
-        </select>
-        <p class="text-xs text-slate-500 mt-1">Solo se permite crear usuarios con rol <b>User</b>.</p>
-      </div>
-
-      <div>
-        <label class="block text-sm">Tipo (si Rol = User)</label>
-        <select v-model="form.Tipo" class="border rounded-lg px-3 py-2 w-full" :disabled="form.RolId !== 2">
-          <option value="">—</option>
+        <select v-model="form.Tipo" class="border rounded-lg px-3 py-2 w-full" required>
           <option>Funcionario</option>
           <option>Normal</option>
         </select>
@@ -89,6 +91,7 @@ const form = reactive({
   CargoId: 1,
   RolId: 2,   // 2 = User (permitido). 1 = Admin (bloqueado)
   Tipo: "",   // Requerido cuando RolId = 2 (a elección del negocio)
+  Password: "",  // Password
 });
 
 const submitting = ref(false);
@@ -105,12 +108,19 @@ async function submit() {
   }
 
   // Regla opcional: si es User, exigir Tipo (si tu negocio lo requiere)
-  if (form.RolId === 2 && !form.Tipo) {
-    errorMsg.value = "Selecciona el 'Tipo' para usuarios con rol User.";
+  if (!form.Tipo) {
+  errorMsg.value = "Selecciona el rol (Funcionario/Normal).";
+  error(errorMsg.value);
+  return;
+  }
+  
+  if (!form.Password || form.Password.length < 6) {
+    errorMsg.value = "La contraseña debe tener al menos 6 caracteres.";
     error(errorMsg.value);
     return;
   }
 
+  
   try {
     submitting.value = true;
     // POST /api/users espera PascalCase (según tu backend)
