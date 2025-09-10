@@ -58,8 +58,8 @@ import { useAuthStore } from "../stores/auth";
 const { success, error } = useToasts();
 const props = defineProps({ doc: { type: Object, default: null } });
 const emit = defineEmits(["close", "success"]);
-
 const auth = useAuthStore();
+
 const searchUser = ref("");
 const suggestedUsers = ref([]);
 const selectedUser = ref(null);
@@ -87,18 +87,14 @@ function onSearch() {
 function selectUser(u) { selectedUser.value = u; searchUser.value = u.fullName; suggestedUsers.value = []; }
 
 async function submit() {
-if (String(selectedUser.value.id) === currentId) {
-  errorMsg.value = "No puedes enviarte documentos a ti mismo.";
+if (!props.doc || !selectedUser.value) return;
+const myId = String(auth.user?.id ?? auth.user?.Id ?? "");
+if (String(selectedUser.value.id) === String(myId)) {
+  errorMsg.value = "No puedes reenviarte un documento a ti mismo.";
   error(errorMsg.value);
   return;
-}  
-if (!props.doc || !selectedUser.value) return;
-
-const myId = auth.user?.id ?? auth.user?.Id;
-if (String(selectedUser.value.id) === String(myId)) {
-  errorMsg.value = "No puedes reenviar un documento a ti mismo.";
-  return;
 }
+
   // 🚫 no te reenvíes a ti mismo
 const currentId = String(auth.user?.id ?? auth.user?.Id ?? "");
 
