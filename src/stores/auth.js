@@ -59,6 +59,13 @@ export const useAuthStore = defineStore("auth", {
       this.token = null;
       this.user = null;
       localStorage.removeItem("rf_auth");
-    },
+      // 🔥 borra todos los caches rf_fullname_*
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("rf_fullname_")) localStorage.removeItem(k);
+      }
+      // y el aviso de expiración si lo usas
+      sessionStorage.removeItem("rf_warn_exp");
+    }
   },
 });

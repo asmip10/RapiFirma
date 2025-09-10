@@ -77,8 +77,10 @@ import { ref } from "vue";
 import { UserService } from "../services/user.service";
 import { DocumentService } from "../services/document.service";
 import { useToasts } from "../composables/useToasts";
+import { useAuthStore } from "../stores/auth";
 
 const { success, error } = useToasts();
+const auth = useAuthStore();
 const emit = defineEmits(["close", "upload-success"]);
 
 const searchUser = ref("");
@@ -141,7 +143,10 @@ function onSearch() {
 
   searchTimer = setTimeout(async () => {
     try {
-      suggestedUsers.value = await UserService.search(q); // maneja 400 -> []
+        const myId = auth.user?.id ?? auth.user?.Id;
+        const results = await UserService.search(q);
+        // ❌ saca al usuario logeado de las sugerencias
+        suggestedUsers.value = results.filter(u => String(u.id) !== String(myId));
       if (!suggestedUsers.value.length) {
         searchHint.value = "Sin resultados para tu búsqueda.";
       }
@@ -178,7 +183,11 @@ async function submitPdf() {
   errorMsg.value = "";
   uploadSuccess.value = false;
   if (!selectedFile.value || !selectedUser.value) return;
-
+  const myId = auth.user?.id ?? auth.user?.Id;
+  if (String(selectedUser.value.id) === String(myId)) {
+    errorMsg.value = "No puedes enviarte el documento a ti mismo.";
+    return;
+  }
   try {
     submitting.value = true;
     const pdfBase64 = await fileToBase64(selectedFile.value);

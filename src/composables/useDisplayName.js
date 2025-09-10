@@ -1,53 +1,52 @@
- // src/composables/useDisplayName.js
+// src/composables/useDisplayName.js
 import { ref } from "vue";
 import { UserService } from "../services/user.service";
 import { useAuthStore } from "../stores/auth";
 
 export function useDisplayName() {
   const auth = useAuthStore();
-  const displayName = ref(auth.user?.username ?? "usuario");
-
-   // cache por usuario
-  const cacheKey = `rf_fullname_${auth.user?.id ?? "na"}`;
+  const displayName = ref("usuario");
 
   async function resolve() {
-     // 1) cache local
+    // asegúrate de tener auth cargado
+    auth.loadFromStorage?.();
+
+    const idKey = auth.user?.id ?? auth.user?.username ?? "unknown";
+    const cacheKey = `rf_fullname_${idKey}`;
+
+    // 1) cache
     const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      displayName.value = cached;
-      return displayName;
-    }
+    if (cached) { displayName.value = cached; return displayName; }
 
-
-    // 2) intenta /api/users/me (ideal)
+    // 2) /api/users/me (tu backend devuelve nombres/apellidos)
     try {
-      const me = await UserService.me();
-      if (me?.fullName) {
-        displayName.value = me.fullName;
-        localStorage.setItem(cacheKey, me.fullName);
+      const me = await UserService.me(); // ya arma fullName si puede
+      const full = me?.fullName || [me?.nombres, me?.apellidos].filter(Boolean).join(" ").trim();
+      if (full) {
+        displayName.value = full;
+        localStorage.setItem(cacheKey, full);
+        // limpia posibles llaves malas previas
+        localStorage.removeItem("rf_fullname_na");
         return displayName;
       }
-    } catch {
-      // silencioso: seguiremos a búsqueda
-    }
+    } catch {}
 
-    // 3) fallback: búsqueda por username (mín. 2 letras)
+    // 3) búsqueda por username
     const q = (auth.user?.username ?? "").trim();
     if (q.length >= 2) {
       try {
         const results = await UserService.search(q);
-        const matchById = results.find(r => String(r.id) === String(auth.user?.id));
-        const pick = matchById ?? results[0];
-        if (pick?.fullName) {
-          displayName.value = pick.fullName;
-          localStorage.setItem(cacheKey, pick.fullName);
+        const match = results.find(r => String(r.id) === String(auth.user?.id)) ?? results[0];
+        if (match?.fullName) {
+          displayName.value = match.fullName;
+          localStorage.setItem(cacheKey, match.fullName);
+          localStorage.removeItem("rf_fullname_na");
           return displayName;
         }
-      } catch {
-       // silencioso: fallback a username
-      }
+      } catch {}
     }
-    // 4) último recurso: username del JWT
+
+    // 4) fallback
     displayName.value = auth.user?.username ?? "usuario";
     return displayName;
   }
