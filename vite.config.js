@@ -7,5 +7,5 @@ export default defineConfig({
   css: {
     postcss: './postcss.config.cjs',  // Apunta explícitamente para forzar procesamiento
   },
-  server: { proxy: { '/api': 'https://localhost:7245' } }
+  server: { proxy: { '/api': process.env.VITE_API_BASE_URL }  || 'https://localhost:7245'}
 });

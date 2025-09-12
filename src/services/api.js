@@ -3,7 +3,7 @@ import axios from "axios";
 import { useAuthStore } from "../stores/auth";
 import { useToasts } from "../composables/useToasts";
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://localhost:7245',
   timeout: 20000,
 });
 
