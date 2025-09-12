@@ -1,35 +1,45 @@
-RapiFirma/
-├── RapiFirma.sln                # Solución principal
-├── src/
-│   ├── RapiFirma/               # Proyecto principal ASP.NET Core
-│   │   ├── Controllers/         # Controladores API (e.g., AuthController, DocumentController)
-│   │   ├── Middleware/          # Middleware personalizado (e.g., JWT validation)
-│   │   ├── Program.cs           # Punto de entrada de la aplicación
-│   │   ├── appsettings.json     # Configuración (connection strings, JWT settings)
-│   │   ├── wwwroot/             # Archivos estáticos (si aplica)
-│   │   ├── Domain/              # Capa de dominio (entidades y lógica de negocio)
-│   │   │   ├── Entities/        # Entidades (e.g., User, Document, Role)
-│   │   │   ├── Interfaces/      # Interfaces de servicios y repositorios
-│   │   │   └── ValueObjects/    # Objetos de valor (si se usan)
-│   │   ├── Application/         # Capa de aplicación (casos de uso y servicios)
-│   │   │   ├── Services/        # Implementaciones de servicios (e.g., DocumentService)
-│   │   │   ├── DTOs/            # Objetos de transferencia de datos
-│   │   │   └── Interfaces/      # Interfaces de servicios
-│   │   ├── Infrastructure/      # Capa de infraestructura (implementaciones concretas)
-│   │   │   ├── Persistence/     # Contexto EF Core y repositorios (e.g., RapiFirmaDbContext)
-│   │   │   ├── Authentication/  # Gestión de JWT
-│   │   │   ├── Jobs/            # Jobs de Hangfire (e.g., limpieza de PDFs)
-│   │   │   └── External/        # Adaptadores externos (si aplica)
-│   │   └── Tests/               # Pruebas unitarias (opcional)
-│   │       ├── UnitTests/       # Pruebas para servicios y lógica
-│   │       └── IntegrationTests/# Pruebas de integración
-├── .gitignore                   # Ignorar archivos generados
-└── README.md                    # Documentación del proyecto
+/RapiFirma
 
 
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+	    <TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.21" />
+    <PackageReference Include="Hangfire.PostgreSql" Version="1.20.12" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.19" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.3.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.19" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.19">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.19">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.4" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+		<Folder Include="Middleware\" />
+		<Folder Include="Test\" />
+   </ItemGroup>
+</Project>
 
 /Domain/Entities
-
 namespace RapiFirma.Domain.Entities
 {
     using System.ComponentModel.DataAnnotations;
@@ -145,7 +155,7 @@ namespace RapiFirma.Domain.Entities
         public byte[] PdfData { get; private set; }
 
         /// <summary>
-        /// Fecha de expiración del documento (FechaEnvio + 3 meses).
+        /// Fecha de expiración del documento 
         /// </summary>
         public DateTime FechaExpiracion { get; private set; }
 
@@ -627,7 +637,7 @@ namespace RapiFirma.Domain.Interfaces
     public interface IDocumentService
     {
         /// <summary>
-        /// Sube un nuevo documento con validación de límite (≤4 por usuario).
+        /// Sube un nuevo documento
         /// </summary>
         /// <param name="nombrePdf">Nombre del archivo PDF.</param>
         /// <param name="destinatarioId">Identificador del destinatario.</param>
@@ -3097,16 +3107,16 @@ namespace RapiFirma.Controllers
 //appsettings.Production.json   
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Database=RapiFirma;Username=postgres;Password=root"
+    "DefaultConnection": ""
   },
   "Jwt": {
-    "Key": "YourActualSuperSecretKey1234567891011",
+    "Key": "",
     "Issuer": "RapiFirmaIssuer",
-    "Audience": "RapiFirmaAudience"
+    "Audience": "RapiFirmaClients"
   },
   "Hangfire": {
-    "DashboardUsername": "admin",
-    "DashboardPassword": "admin123"
+    "DashboardUsername": "",
+    "DashboardPassword": ""
   },
   "Logging": {
     "LogLevel": {
@@ -3119,6 +3129,7 @@ namespace RapiFirma.Controllers
 }
 //Program.cs
 using Hangfire;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using RapiFirma.Application.Services;
@@ -3129,13 +3140,21 @@ using RapiFirma.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddCors(o =>
+builder.WebHost.ConfigureKestrel(o =>
 {
-    o.AddPolicy("FrontWithCreds", p =>
-        p.WithOrigins("http://localhost:5173")
-         .AllowAnyMethod()
-         .AllowAnyHeader()
-         .AllowCredentials());       
+    o.Limits.MaxRequestBodySize = 20 * 1024 * 1024; // 20 MB
+});
+
+var corsOrigins = (Environment.GetEnvironmentVariable("Cors__Origins") ?? "http://localhost:5173")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+builder.Services.AddCors(opt =>
+{
+    opt.AddPolicy("CorsPolicy", p => p
+        .WithOrigins(corsOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials()
+    );
 });
 
 // Configurar la cadena de configuración
@@ -3202,13 +3221,19 @@ builder.Services.AddHttpContextAccessor();
 // Configurar el pipeline HTTP
 var app = builder.Build();
 
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseCors("FrontWithCreds");
+app.UseCors("CorsPolicy");
+app.MapGet("/health", () => Results.Ok(new { status = "OK" }));
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -3233,47 +3258,6 @@ app.UseExceptionHandler(errorApp =>
 app.MapControllers();
 
 app.Run();
-//RapiFirma.cspj
-
-
-
-<Project Sdk="Microsoft.NET.Sdk.Web">
-    <PropertyGroup>
-	    <TargetFramework>net8.0</TargetFramework>
-		<Nullable>enable</Nullable>
-		<ImplicitUsings>enable</ImplicitUsings>
-	</PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.21" />
-    <PackageReference Include="Hangfire.PostgreSql" Version="1.20.12" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.19" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="2.3.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.19" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.19">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.19">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageReference Include="Moq" Version="4.20.72" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.4" />
-    <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
-  <ItemGroup>
-		<Folder Include="Middleware\" />
-		<Folder Include="Test\" />
-   </ItemGroup>
-</Project>
-
 
 /////////////////////////////////////
 
