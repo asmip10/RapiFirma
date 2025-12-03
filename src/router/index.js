@@ -1,10 +1,10 @@
 // src/router/index.js
 import { createRouter, createWebHistory } from "vue-router";
-import { requireAuth } from "../guards/authGuard";
-import { requireRole } from "../guards/roleGuard";
+import { requireAuth, requireRole, requireAuthAndValidSession } from "../guards/authGuard";
 
 import LoginView from "../views/LoginView.vue";
 import NotFoundView from "../views/NotFoundView.vue";
+import ChangePasswordView from "../views/ChangePasswordView.vue";
 
 // Layouts
 import AdminLayout from "../components/layout/AdminLayout.vue";
@@ -23,30 +23,42 @@ const DocumentOverviewView = () => import("../views/admin/DocumentOverviewView.v
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    // Ruta pública - Login
     { path: "/login", name: "login", component: LoginView },
 
+    // Nueva ruta - Cambio de contraseña (requiere autenticación)
+    {
+      path: "/change-password",
+      name: "change-password",
+      component: ChangePasswordView,
+      beforeEnter: [requireAuth]
+    },
+
+    // Rutas admin - requieren auth + rol Admin
     {
       path: "/admin",
       component: AdminLayout,
-      beforeEnter: [requireAuth, requireRole(["Admin"])],
+      beforeEnter: [requireAuthAndValidSession, requireRole(["Admin"])],
       children: [
-          { path: "", name: "admin.dashboard", component: () => import("../views/admin/DashboardView.vue") },
-          { path: "users", name: "admin.users", component: () => import("../views/admin/UserListView.vue") },
-          { path: "users/create", name: "admin.users.create", component: () => import("../views/admin/CreateUserView.vue") },
-          { path: "users/:id/edit", name: "admin.users.edit", component: () => import("../views/admin/EditUserView.vue"), props: true },
-          { path: "docs", name: "admin.docs", component: () => import("../views/admin/DocumentOverviewView.vue") },
+        { path: "", name: "admin.dashboard", component: () => import("../views/admin/DashboardView.vue") },
+        { path: "users", name: "admin.users", component: () => import("../views/admin/UserListView.vue") },
+        { path: "users/create", name: "admin.users.create", component: () => import("../views/admin/CreateUserView.vue") },
+        { path: "users/:id/edit", name: "admin.users.edit", component: () => import("../views/admin/EditUserView.vue"), props: true },
+        { path: "docs", name: "admin.docs", component: () => import("../views/admin/DocumentOverviewView.vue") },
       ],
     },
 
+    // Rutas user - requieren auth solamente
     {
       path: "/",
       component: UserLayout,
-      beforeEnter: [requireAuth],
+      beforeEnter: [requireAuthAndValidSession],
       children: [
         { path: "", name: "user.dashboard", component: UserDashboardView },
       ],
     },
 
+    // Catch-all - 404
     { path: "/:pathMatch(.*)*", name: "not-found", component: NotFoundView },
   ],
 });

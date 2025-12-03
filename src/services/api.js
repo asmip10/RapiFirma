@@ -7,11 +7,32 @@ const api = axios.create({
   timeout: 20000,
 });
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
   const auth = useAuthStore();
-  if (auth?.token) config.headers.Authorization = `Bearer ${auth.token}`;
-  // Aviso de expiración si quedan <=120s
-  if (auth?.user?.exp) {
+
+  // Si hay un refresh en proceso, esperar
+  if (auth.isRefreshing && auth.refreshPromise) {
+    await auth.refreshPromise;
+  }
+
+  // Verificar si necesito refresh (solo si hay refresh token disponible)
+  if (auth.shouldRefresh && !auth.isRefreshing && auth.refreshToken) {
+    try {
+      await auth.refreshAccessToken();
+    } catch (error) {
+      // Refresh falló, el interceptor de response manejará el logout
+      return config;
+    }
+  }
+
+  // Inyectar access token (uso accessToken para el nuevo sistema, pero mantengo compatibilidad)
+  const tokenToUse = auth.accessToken || auth.token;
+  if (tokenToUse) {
+    config.headers.Authorization = `Bearer ${tokenToUse}`;
+  }
+
+  // Mantener lógica de advertencia para tokens viejos sin refresh
+  if (auth?.user?.exp && !auth.refreshToken) {
     const now = Math.floor(Date.now() / 1000);
     const secs = auth.user.exp - now;
     const warned = sessionStorage.getItem("rf_warn_exp");
@@ -29,34 +50,59 @@ api.interceptors.request.use((config) => {
       sessionStorage.setItem("rf_warn_exp", "1");
     }
   }
+
   return config;
 });
 
 api.interceptors.response.use(
   (r) => r,
-  (err) => {
-    const { error } = useToasts();
+
+  async (err) => {
+    const auth = useAuthStore();
+    const originalRequest = err.config;
+    const { error: showError } = useToasts();
     const status = err?.response?.status;
-    if (status === 401) {
-      const auth = useAuthStore();
-      auth.logout();
-      error("Sesión expirada. Vuelve a iniciar sesión.");
-      // redirige solo si no estás ya en /login para evitar loops
-      if (!location.pathname.startsWith("/login")) {
-        const params = new URLSearchParams({ r: location.pathname + location.search });
-        window.location.href = `/login?${params.toString()}`;
+
+    if (status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        // Si hay refresh token disponible, intentar refrescar
+        if (auth.refreshToken && !auth.isRefreshing) {
+          await auth.refreshAccessToken();
+
+          // Reintentar request original con nuevo token
+          const tokenToUse = auth.accessToken || auth.token;
+          originalRequest.headers.Authorization = `Bearer ${tokenToUse}`;
+          return api(originalRequest);
+        } else {
+          // No hay refresh token o ya está en proceso, forzar logout
+          throw err;
+        }
+      } catch (refreshError) {
+        // Refresh falló: logout y redirigir
+        await auth.logout();
+        showError("Tu sesión ha expirado. Por favor inicia sesión nuevamente.");
+
+        if (!location.pathname.startsWith("/login")) {
+          const params = new URLSearchParams({ r: location.pathname + location.search });
+          window.location.href = `/login?${params.toString()}`;
+        }
+
+        return Promise.reject(refreshError);
       }
     }
-    else if (status === 403) {
-      error("Sin permiso para realizar esta acción.");
-    }
-    else if (status === 404) {
-      error("Documento no existe o fue eliminado.");
-    }
-    else if (!err.response) {
+
+    // Manejo de otros errores (403, 404, network)
+    if (status === 403) {
+      showError("Sin permiso para realizar esta acción.");
+    } else if (status === 404) {
+      showError("Documento no existe o fue eliminado.");
+    } else if (!err.response) {
       // Timeout / red
-      error("No se pudo conectar con el servidor.");
-    }    
+      showError("No se pudo conectar con el servidor.");
+    }
+
     return Promise.reject(err);
   }
 );

@@ -97,10 +97,13 @@
 import { ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useAuthStore } from "../stores/auth";
+import { useToasts } from "../composables/useToasts";
+import { isFeatureEnabled } from "@/config/featureFlags";
 
 const router = useRouter();
 const route = useRoute();
 const auth = useAuthStore();
+const { success, warning } = useToasts();
 
 const username = ref("");
 const password = ref("");
@@ -110,13 +113,91 @@ const error = ref("");
 async function onSubmit() {
   error.value = "";
   loading.value = true;
+
+  // Validaciones de seguridad
+  if (!username.value.trim()) {
+    error.value = "El usuario es requerido.";
+    loading.value = false;
+    return;
+  }
+
+  if (!password.value.trim()) {
+    error.value = "La contraseña es requerida.";
+    loading.value = false;
+    return;
+  }
+
+  // Validación de DNI si aplica
+  if (username.value.trim().length < 7) {
+    error.value = "El usuario debe tener al menos 7 caracteres.";
+    loading.value = false;
+    return;
+  }
+
   try {
-    await auth.login({ username: username.value, password: password.value });
+    // Verificar feature flags antes de login
+    if (!isFeatureEnabled('REFRESH_TOKEN_ENABLED')) {
+      error.value = "El sistema de login no está disponible temporalmente.";
+      loading.value = false;
+      return;
+    }
+
+    const tokens = await auth.login({
+      username: username.value.trim(), // Sanitizar input
+      password: password.value
+    });
+
+    // Manejar cambio de contraseña forzado (con feature flag)
+    if (isFeatureEnabled('FORCED_PASSWORD_CHANGE_ENABLED') && tokens.requiresPasswordChange) {
+      warning("Debes cambiar tu contraseña para continuar.");
+      const redirect = route.query.r;
+      if (redirect) {
+        router.push(`/change-password?r=${encodeURIComponent(redirect)}`);
+      } else {
+        router.push("/change-password");
+      }
+      return;
+    }
+
+    success("¡Bienvenido! Has iniciado sesión correctamente.");
+
     const redirect = route.query.r;
-    if (redirect) router.push(String(redirect));
-    else router.push("/"); // ⬅️ importante para renderizar MainPanel
-  } catch {
-    error.value = "Credenciales inválidas o servidor no disponible";
+    if (redirect) {
+      router.push(String(redirect));
+    } else {
+      router.push("/");
+    }
+  } catch (err) {
+    // Manejo mejorado de errores
+    if (err.response?.status === 400) {
+      const errors = err.response.data?.errors;
+      if (errors?.[""]?.[0]) {
+        error.value = errors[""][0];
+      } else if (errors?.Username?.[0]) {
+        error.value = errors.Username[0];
+      } else if (errors?.Password?.[0]) {
+        error.value = errors.Password[0];
+      } else {
+        error.value = "Credenciales inválidas.";
+      }
+    } else if (err.response?.status === 429) {
+      error.value = "Demasiados intentos. Espera unos minutos antes de intentar nuevamente.";
+    } else if (err.response?.status >= 500) {
+      error.value = "Error del servidor. Intenta más tarde.";
+    } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+      error.value = "Tiempo de espera agotado. Verifica tu conexión.";
+    } else if (err.message?.includes('Network Error')) {
+      error.value = "Error de conexión. Verifica tu internet.";
+    } else if (err.message?.includes('refresh tokens')) {
+      error.value = "El sistema de autenticación no está disponible. Intenta más tarde.";
+    } else {
+      error.value = "Error inesperado. Intenta nuevamente.";
+    }
+
+    // Logging para debugging (solo en development)
+    if (import.meta.env.DEV) {
+      console.error('Login error:', err);
+    }
   } finally {
     loading.value = false;
   }
