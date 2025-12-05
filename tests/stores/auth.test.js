@@ -125,7 +125,7 @@ describe('Auth Store v2.0 - Refresh Tokens', () => {
       AuthService.login.mockResolvedValue({});
 
       await expect(authStore.login({ username: 'test', password: 'test' }))
-        .rejects.toThrow('Sin token');
+        .rejects.toThrow('Respuesta de login inválida: falta accessToken');
     });
 
     it('should persist login data to localStorage', async () => {
@@ -153,7 +153,7 @@ describe('Auth Store v2.0 - Refresh Tokens', () => {
       expect(stored.accessToken).toBe('access_token_123');
       expect(stored.refreshToken).toBe('refresh_token_456');
       expect(stored.expiresAt).toBe(mockTokens.expiresAt);
-      expect(stored.usernameFallback).toBe('testuser');
+      expect(stored.user.username).toBe('testuser');
     });
   });
 
@@ -275,7 +275,12 @@ describe('Auth Store v2.0 - Refresh Tokens', () => {
         refreshToken: 'stored_refresh_token',
         expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
         requiresPasswordChange: false,
-        usernameFallback: 'fallback_username'
+        user: {
+          id: '123',
+          username: 'testuser',
+          role: 'User',
+          tipo: 'Normal'
+        }
       };
 
       const mockClaims = {
@@ -297,33 +302,24 @@ describe('Auth Store v2.0 - Refresh Tokens', () => {
       expect(authStore.requiresPasswordChange).toBe(false);
     });
 
-    it('should load old format and migrate to new format', () => {
-      const oldStoredData = {
-        token: 'old_token_123',
-        usernameFallback: 'old_username'
-      };
-
-      const mockClaims = {
-        nameid: '123',
-        unique_name: null, // No username en token
-        role: 'User',
-        tipo: 'Interno',
-        exp: Math.floor(Date.now() / 1000) + 8 * 60 * 60
-      };
-
-      vi.mocked(jwtDecode).mockReturnValue(mockClaims);
-      localStorage.setItem('rf_auth', JSON.stringify(oldStoredData));
+    it('should handle invalid data in localStorage', () => {
+      localStorage.setItem('rf_auth', 'invalid_json');
 
       authStore.loadFromStorage();
 
-      expect(authStore.accessToken).toBe('old_token_123');
+      expect(authStore.accessToken).toBeNull();
       expect(authStore.refreshToken).toBeNull();
-      expect(authStore.token).toBe('old_token_123'); // Compatibilidad
-      expect(authStore.user?.username).toBe('old_username'); // Usa fallback
+      expect(authStore.user).toBeNull();
     });
 
-    it('should handle corrupted localStorage data', () => {
-      localStorage.setItem('rf_auth', 'invalid_json');
+    it('should handle missing accessToken in validation', () => {
+      const invalidData = {
+        refreshToken: 'refresh_token',
+        expiresAt: new Date().toISOString(),
+        requiresPasswordChange: false
+      };
+
+      localStorage.setItem('rf_auth', JSON.stringify(invalidData));
 
       authStore.loadFromStorage();
 
