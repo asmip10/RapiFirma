@@ -685,20 +685,14 @@ async function handleDownload(queue) {
 async function handlePreview(queue) {
   try {
     const blob = await queueStore.downloadDocument(queue.documentId, queue.queueId);
-    const pdfBlob = blob?.type ? blob : new Blob([blob], { type: 'application/pdf' });
+    const pdfBlob = blob?.type === 'application/pdf'
+      ? blob
+      : new Blob([blob], { type: 'application/pdf' });
     const url = window.URL.createObjectURL(pdfBlob);
 
     const win = window.open(url, '_blank', 'noopener,noreferrer');
     if (!win) {
-      // Fallback si el navegador bloquea popups
-      const a = document.createElement('a');
-      a.href = url;
-      const baseName = queue.documentName || `documento_${queue.queueId}`;
-      a.download = /\.pdf$/i.test(baseName) ? baseName : `${baseName}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      success('Preview bloqueado, descargado en su lugar');
+      error('Tu navegador bloqueó la previsualización. Permite popups para abrir el PDF.');
     }
 
     setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
