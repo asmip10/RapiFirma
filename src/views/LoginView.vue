@@ -94,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 import { useToasts } from "../composables/useToasts";
@@ -161,11 +161,24 @@ async function onSubmit() {
 
     success("¡Bienvenido! Has iniciado sesión correctamente.");
 
+    // FORZAR actualización del store para asegurar consistencia
+    await auth.loadFromStorage();
+
+    // Pequeña pausa para asegurar que el estado se actualice completamente
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     const redirect = route.query.r;
+    console.log("[Login] Estado auth después de loadFromStorage:", {
+      isAuthenticated: auth.isAuthenticated,
+      hasToken: !!auth.accessToken,
+      hasUser: !!auth.user,
+      redirectTo: redirect || "/"
+    });
+
     if (redirect) {
-      router.push(String(redirect));
+      await router.replace(String(redirect));
     } else {
-      router.push("/");
+      await router.replace("/");
     }
   } catch (err) {
     // Manejo mejorado de errores

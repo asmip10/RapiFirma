@@ -1,9 +1,9 @@
 // src/guards/authGuard.js
 import { useAuthStore } from "../stores/auth";
 
-export function requireAuth(to, from, next) {
+export async function requireAuth(to, from, next) {
   const auth = useAuthStore();
-  auth.loadFromStorage();
+  await auth.loadFromStorage();
 
   if (!auth.isAuthenticated) {
     console.warn("[Guard] Bloqueado: no autenticado →", to.fullPath);
@@ -21,9 +21,9 @@ export function requireAuth(to, from, next) {
 
 // src/guards/roleGuard.js
 export function requireRole(roles = []) {
-  return (to, from, next) => {
+  return async (to, from, next) => {
     const auth = useAuthStore();
-    auth.loadFromStorage();
+    await auth.loadFromStorage();
 
     if (!auth.isAuthenticated) {
       console.warn("[Guard] Bloqueado: no autenticado para rol", roles);
@@ -46,24 +46,37 @@ export function requireRole(roles = []) {
 }
 
 // Nueva guardia combinada para autenticación y sesión válida
-export function requireAuthAndValidSession(to, from, next) {
+export async function requireAuthAndValidSession(to, from, next) {
   const auth = useAuthStore();
-  auth.loadFromStorage();
+  await auth.loadFromStorage();
+
+  console.log("[Guard] Estado auth:", {
+    isAuthenticated: auth.isAuthenticated,
+    hasToken: !!auth.accessToken,
+    hasUser: !!auth.user,
+    isExpired: auth.isTokenExpired,
+    hasRefresh: !!auth.refreshToken,
+    to: to.fullPath
+  });
 
   if (!auth.isAuthenticated) {
+    console.warn("[Guard] Bloqueado: no autenticado →", to.fullPath);
     return next({ name: "login", query: { r: to.fullPath } });
   }
 
   // Si el token está expirado y no hay refresh token
   if (auth.isTokenExpired && !auth.refreshToken) {
-    auth.logout();
+    console.warn("[Guard] Token expirado sin refresh → logout");
+    await auth.logout();
     return next({ name: "login", query: { r: to.fullPath } });
   }
 
   // Verificar si necesita cambio de contraseña forzado
   if (auth.requiresPasswordChange && to.name !== "change-password") {
+    console.warn("[Guard] Redirigido: requiere cambio de contraseña");
     return next({ name: "change-password" });
   }
 
+  console.log("[Guard] Acceso permitido a:", to.fullPath);
   next();
 }

@@ -1,10 +1,11 @@
 // src/services/api.js
 import axios from "axios";
+import { API_CONFIG } from "../config/api.config";
 import { useAuthStore } from "../stores/auth";
 import { useToasts } from "../composables/useToasts";
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://localhost:7245',
-  timeout: 20000,
+  baseURL: API_CONFIG.BASE_URL,
+  timeout: API_CONFIG.TIMEOUT,
 });
 
 api.interceptors.request.use(async (config) => {

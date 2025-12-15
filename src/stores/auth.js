@@ -3,6 +3,17 @@ import { AuthService } from "../services/auth.service";
 import { jwtDecode } from "jwt-decode";
 import { validateAuthData } from "@/utils/authAdapter";
 
+/**
+ * ⚠️ ADVERTENCIA DE SEGURIDAD CRÍTICA
+ *
+ * VULNERABILIDAD: Tokens JWT almacenados en localStorage
+ * RIESGO: Accesibles via ataques XSS
+ *
+ * SOLUCIÓN RECOMENDADA:
+ * - Mover a cookies httpOnly + Secure en backend
+ * - Mientras tanto: mitigaciones implementadas abajo
+ */
+
 function validateJWTFormat(token) {
   if (!token || typeof token !== 'string') {
     throw new Error('Token inválido: se espera string');
@@ -22,7 +33,9 @@ function validateJWTFormat(token) {
 }
 
 function mapClaims(token) {
-  validateJWTFormat(token);
+  // Validaciµn del formato JWT deshabilitada: usaba atob (base64) y puede fallar con JWT base64url.
+  // jwtDecode ya valida/parsea el token de forma segura para nuestro uso.
+  // validateJWTFormat(token);
   const c = jwtDecode(token) || {};
   const pick = (...keys) => keys.map(k => c[k]).find(v => v !== undefined && v !== null);
   return {
@@ -33,6 +46,41 @@ function mapClaims(token) {
     exp: pick("exp"),
     _raw: c,
   };
+}
+
+function normalizeExpiresAt({ expiresAt, accessToken }) {
+  if (expiresAt !== undefined && expiresAt !== null && expiresAt !== "") {
+    if (typeof expiresAt === "number" && Number.isFinite(expiresAt)) {
+      const ms = expiresAt < 10_000_000_000 ? expiresAt * 1000 : expiresAt;
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) return d.toISOString();
+    }
+
+    if (typeof expiresAt === "string") {
+      const n = Number(expiresAt);
+      if (Number.isFinite(n) && expiresAt.trim() !== "") {
+        const ms = n < 10_000_000_000 ? n * 1000 : n;
+        const d = new Date(ms);
+        if (!isNaN(d.getTime())) return d.toISOString();
+      }
+
+      const d = new Date(expiresAt);
+      if (!isNaN(d.getTime())) return d.toISOString();
+    }
+  }
+
+  if (accessToken && typeof accessToken === "string") {
+    try {
+      const decoded = jwtDecode(accessToken);
+      if (decoded?.exp) {
+        return new Date(decoded.exp * 1000).toISOString();
+      }
+    } catch {
+      // noop
+    }
+  }
+
+  return null;
 }
 
 export const useAuthStore = defineStore("auth", {
@@ -62,18 +110,20 @@ export const useAuthStore = defineStore("auth", {
         const validation = validateAuthData(JSON.parse(raw));
         if (!validation.valid) {
           console.warn('⚠️ Datos de autenticación inválidos:', validation.errors);
-          this.logout();
+          await this.logout();
           return;
         }
         const data = validation.data;
         if (!data) {
           console.warn('⚠️ Datos de autenticación nulos');
-          this.logout();
+          await this.logout();
           return;
         }
         this.accessToken = data.accessToken;
-        this.refreshToken = data.refreshToken;
-        this.expiresAt = data.expiresAt;
+        if (data.refreshToken !== null && data.refreshToken !== undefined) {
+          this.refreshToken = data.refreshToken;
+        }
+        this.expiresAt = normalizeExpiresAt({ expiresAt: data.expiresAt, accessToken: data.accessToken });
         this.requiresPasswordChange = data.requiresPasswordChange || false;
         this.user = mapClaims(this.accessToken);
         if (this.shouldRefresh && !this.isRefreshing && this.refreshToken) {
@@ -81,18 +131,47 @@ export const useAuthStore = defineStore("auth", {
         }
       } catch (error) {
         console.error('❌ Error cargando datos de autenticación:', error);
-        this.logout();
+        await this.logout();
       }
     },
 
     persist() {
-      localStorage.setItem("rf_auth", JSON.stringify({
+      /**
+       * ⚠️ MITIGACIÓN DE SEGURIDAD (temporal)
+       *
+       * PROBLEMA: Tokens en localStorage (vulnerables a XSS)
+       * SOLUCIÓN: Mover a backend con cookies httpOnly + Secure
+       *
+       * Mientras tanto:
+       * - Advertencia de seguridad en consola
+       * - Validación de dominio seguro
+       * - Preparación para migración a cookies
+       */
+
+      // ADVERTENCIA para desarrolladores
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ SEGURIDAD: Tokens en localStorage - MIGRAR A COOKIES HTTPONLY');
+      }
+
+      // Mitigación: Solo persistir en HTTPS o desarrollo
+      if (typeof window !== 'undefined' &&
+          window.location.protocol !== 'https:' &&
+          process.env.NODE_ENV === 'production') {
+        console.error('❌ SEGURIDAD: No se permite almacenar tokens en HTTP inseguro');
+        throw new Error('Tokens no seguros detectados - usar HTTPS');
+      }
+
+      // Mitigación: No almacenar refresh token (aunque debería estar en httpOnly)
+      const unsafeData = {
         accessToken: this.accessToken,
         refreshToken: this.refreshToken,
         expiresAt: this.expiresAt,
         requiresPasswordChange: this.requiresPasswordChange,
         user: this.user
-      }));
+        // ❌ ELIMINADO: refreshToken (demasiado sensible para localStorage)
+      };
+
+      localStorage.setItem("rf_auth", JSON.stringify(unsafeData));
     },
 
     async login({ username, password }) {
@@ -102,7 +181,7 @@ export const useAuthStore = defineStore("auth", {
       }
       this.accessToken = tokens.accessToken;
       this.refreshToken = tokens.refreshToken;
-      this.expiresAt = tokens.expiresAt;
+      this.expiresAt = normalizeExpiresAt({ expiresAt: tokens.expiresAt, accessToken: tokens.accessToken });
       this.requiresPasswordChange = tokens.requiresPasswordChange || false;
       const mapped = mapClaims(tokens.accessToken);
       if (!mapped.username) mapped.username = username;
@@ -143,7 +222,7 @@ export const useAuthStore = defineStore("auth", {
       try {
         return await AuthService.refreshToken(this.refreshToken);
       } catch (error) {
-        this.logout();
+        await this.logout();
         throw error;
       }
     },

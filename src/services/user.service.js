@@ -55,6 +55,7 @@ export const UserService = {
       return (Array.isArray(data) ? data : []).map(u => ({
         id: u.id ?? u.Id,
         fullName: u.fullName ?? u.FullName ?? `${u.nombres ?? ""} ${u.apellidos ?? ""}`.trim(),
+        email: u.email ?? u.Email ?? "",
         cargo: u.cargo ?? u.Cargo ?? "",
       }));
     } catch (e) {

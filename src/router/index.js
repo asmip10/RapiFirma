@@ -45,6 +45,7 @@ const router = createRouter({
         { path: "users/create", name: "admin.users.create", component: () => import("../views/admin/CreateUserView.vue") },
         { path: "users/:id/edit", name: "admin.users.edit", component: () => import("../views/admin/EditUserView.vue"), props: true },
         { path: "docs", name: "admin.docs", component: () => import("../views/admin/DocumentOverviewView.vue") },
+        { path: "migration", name: "admin.migration", component: () => import("../views/admin/MigrationAdminView.vue") },
       ],
     },
 
