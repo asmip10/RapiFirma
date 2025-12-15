@@ -47,17 +47,32 @@ export const UserService = {
     }
   },
 
-  async search(query) {
+  async search(query, { limit = 10 } = {}) {
     const q = (query ?? "").trim();
     if (q.length < 2) return [];
+
     try {
-      const { data } = await api.get("/api/users/search", { params: { query: q } });
-      return (Array.isArray(data) ? data : []).map(u => ({
-        id: u.id ?? u.Id,
-        fullName: u.fullName ?? u.FullName ?? `${u.nombres ?? ""} ${u.apellidos ?? ""}`.trim(),
-        email: u.email ?? u.Email ?? "",
-        cargo: u.cargo ?? u.Cargo ?? "",
-      }));
+      const { data } = await api.get("/api/users/search", { params: { q, limit } });
+      const users = data?.data?.users ?? data?.users ?? (Array.isArray(data) ? data : []);
+
+      return (Array.isArray(users) ? users : []).map(u => {
+        const id = u.id ?? u.Id ?? null;
+        const nombres = u.nombres ?? u.Nombres ?? "";
+        const apellidos = u.apellidos ?? u.Apellidos ?? "";
+        const fullName = (u.fullName ?? u.FullName ?? `${nombres} ${apellidos}`).trim();
+
+        return {
+          id,
+          fullName: fullName || null,
+          username: u.username ?? u.Username ?? null,
+          dni: u.dni ?? u.Dni ?? null,
+          rol: u.rol ?? u.Rol ?? null,
+          tipo: u.tipo ?? u.Tipo ?? null,
+          isActive: u.isActive ?? u.IsActive ?? null,
+          email: u.email ?? u.Email ?? "",
+          cargo: u.cargo ?? u.Cargo ?? "",
+        };
+      });
     } catch (e) {
       if (e?.response?.status === 400) return [];
       throw e;

@@ -197,7 +197,15 @@ class ApiClient {
 
     // Verificar si tenemos cache válido
     if (cached && (Date.now() - cached.timestamp) < API_CONFIG.CACHE_TTL.DASHBOARD) {
-      return cached.data;
+      // Mantener la misma forma que AxiosResponse para que makeRequest() funcione igual
+      return {
+        data: cached.data,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+        __fromCache: true
+      };
     }
 
     // Hacer request

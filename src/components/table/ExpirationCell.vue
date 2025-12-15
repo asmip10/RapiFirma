@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full flex flex-col items-center text-center min-w-0">
+  <div class="w-full flex flex-col items-start min-w-0">
     <!-- Icono de reloj con animación -->
     <!-- Texto de expiración -->
     <div
@@ -11,8 +11,8 @@
       {{ remainingTextDisplay }}
     </div>
 
-    <div v-if="showBadge && badgeText" class="mt-2">
-      <span :class="badgeClasses">{{ badgeText }}</span>
+    <div v-if="showBadge && badgeText" class="mt-2 w-full">
+      <span :class="[badgeClasses, 'max-w-full truncate']">{{ badgeText }}</span>
     </div>
   </div>
 </template>

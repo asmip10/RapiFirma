@@ -312,14 +312,44 @@ export const useDocumentsStore = defineStore("documents", {
         try {
           const result = await queueService.createQueue(queueData);
 
-          // Invalidar cache forzar actualización
-          const cache = getTimedCache('queue_dashboard');
-          if (cache) {
-            cache.delete('dashboard_all');
+          // Optimistic update: reflect the new queue immediately in UI (sent + createdQueues)
+          try {
+            const createdQueue = result?.queue || result?.data?.queue || null;
+            const createdDocument = result?.document || result?.data?.document || null;
+
+            if (createdQueue?.queueId) {
+              const mappedQueue = this.mapQueueItems([createdQueue])[0];
+              if (!this.queues.createdQueues.some(q => String(q.queueId) === String(mappedQueue.queueId))) {
+                this.queues.createdQueues = [mappedQueue, ...this.queues.createdQueues];
+              }
+
+              const totalParticipants = createdQueue.totalParticipants || createdQueue.participants?.length || 0;
+              const signedCount = createdQueue.participants?.filter(p => p?.status === 'Signed')?.length || 0;
+              const pendingCount = Math.max(0, totalParticipants - signedCount);
+              const completionPercentage = totalParticipants > 0 ? Math.round((signedCount / totalParticipants) * 100) : 0;
+
+              const sentDoc = {
+                queueId: createdQueue.queueId,
+                documentId: createdQueue.documentId || createdDocument?.id,
+                documentName: createdQueue.documentName || createdDocument?.nombrePDF || queueData?.nombrePDF || 'Documento',
+                createdAt: createdQueue.createdAt || createdDocument?.createdAt || new Date().toISOString(),
+                status: createdQueue.status || 'InProgress',
+                statusDisplay: createdQueue.status || 'InProgress',
+                signers: createdQueue.participants || [],
+                progress: { totalParticipants, signedCount, pendingCount, completionPercentage }
+              };
+
+              this.sent = [sentDoc, ...this.sent.filter(d => String(d.queueId) !== String(sentDoc.queueId))];
+            }
+          } catch (e) {
+            console.warn('Optimistic UI update failed:', e?.message || e);
           }
 
+          // Invalidar cache forzar actualización
+          cache.delete('queueDashboard');
+
           // Actualizar dashboard después de crear
-          await this.fetchQueueDashboard();
+          try { await this.fetchQueueDashboard(); } catch (e) { console.warn('No se pudo refrescar el dashboard tras crear la cola:', e?.message || e); }
 
           return result;
         } catch (error) {

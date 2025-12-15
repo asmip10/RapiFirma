@@ -1,17 +1,30 @@
 <template>
-  <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-    <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-      <div class="flex justify-between items-center mb-6">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+    @click.self="$emit('close')"
+  >
+    <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100">
         <h3 class="text-2xl font-semibold text-indigo-800">
-          {{ useQueueSystem ? 'Crear Cola de Firma' : 'Subir y Enviar PDF' }}
+          Crear Cola de Firma
         </h3>
-        <button @click="$emit('close')" class="text-gray-500 hover:text-gray-700">
+        <button v-if="false" @click="$emit('close')" class="text-gray-500 hover:text-gray-700">
           ✕
+        </button>
+        <button
+          type="button"
+          @click="$emit('close')"
+          class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+          aria-label="Cerrar"
+        >
+          <XMarkIcon class="w-6 h-6" />
         </button>
       </div>
 
+      <div class="px-6 py-6 overflow-y-auto">
+
       <!-- Toggle de Sistema -->
-      <div v-if="canToggleSystems" class="mb-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+      <div v-if="false" class="mb-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
         <div class="flex items-center justify-between">
           <div>
             <label class="flex items-center cursor-pointer">
@@ -44,7 +57,7 @@
       </div>
 
       <!-- Advertencia de Sistema Antiguo -->
-      <div v-if="!useQueueSystem && showLegacyWarning" class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+      <div v-if="false" class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
         <div class="flex items-center">
           <span class="text-yellow-800 mr-2">⚠️</span>
           <p class="text-sm text-yellow-800">
@@ -60,15 +73,16 @@
       </div>
 
       <!-- Archivo (común a ambos sistemas) -->
-      <div class="mb-6">
-        <label class="block text-sm font-medium text-gray-700 mb-2">
+      <div class="mb-6 rounded-xl border border-gray-200 bg-white p-5">
+        <label class="block text-sm font-semibold text-gray-900 mb-1">
           Documento PDF
         </label>
+        <p class="text-xs text-gray-500 mb-3">Selecciona un PDF desde tu equipo (max. 20MB).</p>
         <input
           type="file"
           accept="application/pdf,.pdf"
           @change="handleFileUpload"
-          class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 focus:outline-none"
         />
         <p v-if="fileError" class="text-sm text-red-600 mt-2">{{ fileError }}</p>
         <p v-if="selectedFile" class="text-xs text-gray-500 mt-2">
@@ -77,7 +91,7 @@
       </div>
 
       <!-- SISTEMA SIMPLE: 1 destinatario -->
-      <div v-if="!useQueueSystem" class="mb-6">
+      <div v-if="false" class="mb-6">
         <label class="block text-sm font-medium text-gray-700 mb-2">
           Destinatario
         </label>
@@ -114,27 +128,36 @@
               </div>
               <div>
                 <div class="font-medium">{{ selectedUser.fullName }}</div>
-                <div class="text-sm text-gray-500">{{ selectedUser.email }}</div>
+              <div class="text-sm text-gray-500">{{ selectedUser.email || selectedUser.username || selectedUser.dni }}</div>
               </div>
             </div>
-            <button
+            <button v-if="false"
               @click="selectedUser = null"
               class="text-red-500 hover:text-red-700"
             >
               ✕
+            </button>
+            <button
+              type="button"
+              @click="selectedUser = null"
+              class="p-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+              aria-label="Quitar"
+            >
+              <XMarkIcon class="w-5 h-5" />
             </button>
           </div>
         </div>
       </div>
 
       <!-- SISTEMA DE COLAS: Múltiples firmantes -->
-      <div v-else class="mb-6">
-        <label class="block text-sm font-medium text-gray-700 mb-2">
+      <div v-if="true" class="mb-6 rounded-xl border border-gray-200 bg-white p-5">
+        <label class="block text-sm font-semibold text-gray-900 mb-1">
           Firmantes (en orden de firma)
         </label>
+        <p class="text-xs text-gray-500 mb-4">Busca usuarios y agregalos a la cola (puedes agregar varios).</p>
 
         <!-- Lista de firmantes seleccionados -->
-        <div v-if="selectedSigners.length > 0" class="mb-4">
+        <div v-if="false && selectedSigners.length > 0" class="mb-4">
           <div class="text-sm text-gray-600 mb-3">Orden de firma:</div>
           <div class="space-y-2">
             <div
@@ -148,7 +171,7 @@
                 </div>
                 <div class="flex-1">
                   <div class="font-medium">{{ signer.fullName }}</div>
-                  <div class="text-sm text-gray-500">{{ signer.email }}</div>
+                  <div class="text-sm text-gray-500">{{ signer.email || signer.username || signer.dni }}</div>
                 </div>
               </div>
               <button
@@ -166,27 +189,64 @@
           <input
             v-model.trim="searchUser"
             @input="onSearchUser"
-            placeholder="Buscar usuarios para agregar como firmantes..."
-            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            placeholder="Buscar usuarios..."
+            autocomplete="off"
+            class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
           />
-          <ul
-            v-if="suggestedUsers.length > 0"
-            class="absolute bg-white border border-gray-300 rounded-lg mt-1 w-full max-h-40 overflow-y-auto z-10 shadow-lg"
-          >
+          <ul v-if="suggestedUsers.length > 0" class="mt-2 bg-white border border-gray-200 rounded-xl w-full max-h-56 overflow-y-auto shadow-sm">
             <li
               v-for="user in suggestedUsers"
               :key="user.id"
-              @click="addSigner(user)"
+              @mousedown.prevent="addSigner(user)"
+              @click.prevent="addSigner(user)"
               class="p-3 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-b-0"
             >
-              <div class="font-medium">{{ user.fullName }}</div>
-              <div class="text-sm text-gray-500">{{ user.email }}</div>
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="font-medium truncate">{{ user.fullName }}</div>
+                  <div class="text-sm text-gray-500 truncate">{{ user.email || user.username || user.dni }}</div>
+                </div>
+                <button
+                  type="button"
+                  @mousedown.prevent.stop="addSigner(user)"
+                  @click.prevent.stop="addSigner(user)"
+                  class="p-2 rounded-lg text-indigo-700 hover:bg-indigo-100 transition-colors"
+                  aria-label="Agregar"
+                >
+                  <PlusIcon class="w-4 h-4" />
+                </button>
+              </div>
             </li>
           </ul>
         </div>
 
+        <div class="mt-3">
+          <div class="text-xs font-semibold text-gray-700 mb-2">Firmantes seleccionados (en orden)</div>
+          <div v-if="selectedSigners.length === 0" class="text-sm text-gray-500">
+            Aún no agregas firmantes. Busca y presiona el botón + para agregarlos.
+          </div>
+          <div v-else class="flex flex-wrap gap-2">
+            <div
+              v-for="(signer, index) in selectedSigners"
+              :key="signer.id"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 text-sm text-indigo-900 border border-indigo-200"
+            >
+              <span class="text-xs font-semibold text-gray-600">{{ index + 1 }}</span>
+              <span class="max-w-[180px] truncate">{{ signer.fullName }}</span>
+              <button
+                type="button"
+                @click="removeSigner(signer.id)"
+                class="p-1 rounded-full text-gray-500 hover:text-red-600 hover:bg-white transition-colors"
+                aria-label="Quitar"
+              >
+                <XMarkIcon class="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Opciones de cola -->
-        <div class="mt-4 p-3 bg-blue-50 rounded-lg">
+        <div v-if="false" class="mt-4 p-3 bg-blue-50 rounded-lg">
           <label class="flex items-center cursor-pointer">
             <input
               type="checkbox"
@@ -208,25 +268,32 @@
         <div class="text-sm text-green-800">{{ successMessage }}</div>
       </div>
 
+      </div>
+
       <!-- Acciones -->
-      <div class="flex justify-end gap-3">
-        <button
-          @click="$emit('close')"
-          class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
-        >
-          Cancelar
-        </button>
-        <button
-          @click="submitDocument"
-          :disabled="!canSubmit || submitting"
-          class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
-        >
-          <svg v-if="submitting" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          {{ submitting ? 'Procesando...' : (useQueueSystem ? 'Crear Cola' : 'Enviar Documento') }}
-        </button>
+      <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-4">
+        <div class="text-xs text-gray-500">
+          Requiere: 1 PDF + 1 firmante
+        </div>
+        <div class="flex justify-end gap-3">
+          <button
+            @click="$emit('close')"
+            class="px-4 py-2 bg-white text-gray-700 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="submitDocument"
+            :disabled="!canSubmit || submitting"
+            class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+          >
+            <svg v-if="submitting" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ submitting ? 'Procesando...' : 'Crear Cola' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -234,7 +301,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
-import { DocumentService } from "../services/document.service";
+import { PlusIcon, XMarkIcon } from "@heroicons/vue/24/outline";
+// import { DocumentService } from "../services/document.service";
 import { UserService } from "../services/user.service";
 import { useDocumentsStore } from "../stores/document";
 import { useAuthStore } from "@/stores/auth";
@@ -248,7 +316,7 @@ const auth = useAuthStore();
 const { success, error } = useToasts();
 
 // Estado del componente
-const useQueueSystem = ref(false);
+const useQueueSystem = ref(true);
 const selectedFile = ref(null);
 const fileError = ref("");
 const errorMsg = ref("");
@@ -271,19 +339,12 @@ const searchHint = ref("");
 let searchTimer;
 
 // Computadas
-const canToggleSystems = computed(() => documentStore.canToggleDashboard);
 const queueSystemEnabled = computed(() => documentStore.isQueueSystemEnabled);
 const canUseMultiSigners = computed(() => documentStore.canUseMultiSigners);
-const showLegacyWarning = computed(() => documentStore.shouldShowLegacyWarning);
 
 const canSubmit = computed(() => {
   if (!selectedFile.value) return false;
-
-  if (useQueueSystem.value) {
-    return canUseMultiSigners.value && selectedSigners.value.length > 0;
-  } else {
-    return selectedUser.value !== null;
-  }
+  return selectedSigners.value.length > 0;
 });
 
 // Métodos
@@ -324,7 +385,7 @@ function handleFileUpload(e) {
 
 function onSearchUser() {
   clearTimeout(searchTimer);
-  selectedUser.value = null;
+  if (!useQueueSystem.value) selectedUser.value = null;
   errorMsg.value = "";
   searchHint.value = "";
 
@@ -342,6 +403,7 @@ function onSearchUser() {
       // const results = await UserService.search(q);
 
       // Simulación para demostración
+      /* mock search removed
       const _mockResults = [
         { id: 1, fullName: "Juan Pérez", email: "juan@ejemplo.com" },
         { id: 2, fullName: "María García", email: "maria@ejemplo.com" },
@@ -351,10 +413,11 @@ function onSearchUser() {
         user.email.toLowerCase().includes(q.toLowerCase())
       );
       void _mockResults;
+      */
 
       // Excluir al usuario logueado
       const myId = auth.user?.id ?? auth.user?.Id;
-      const results = await UserService.search(q);
+      const results = await UserService.search(q, { limit: 10 });
       suggestedUsers.value = (results || []).filter(u => String(u.id) !== String(myId));
 
       if (!suggestedUsers.value.length) {
@@ -369,10 +432,8 @@ function onSearchUser() {
 }
 
 function selectUser(user) {
-  selectedUser.value = user;
-  searchUser.value = user.fullName;
-  suggestedUsers.value = [];
-  searchHint.value = "";
+  // sistema simple deshabilitado
+  void user;
 }
 
 function addSigner(user) {
@@ -382,6 +443,7 @@ function addSigner(user) {
   }
   searchUser.value = "";
   suggestedUsers.value = [];
+  searchHint.value = "";
 }
 
 function removeSigner(userId) {
@@ -411,10 +473,10 @@ async function submitDocument() {
     return;
   }
 
-  const myId = auth.user?.id ?? auth.user?.Id;
+  // const myId = auth.user?.id ?? auth.user?.Id;
 
   // Validación específica para sistema simple
-  if (!useQueueSystem.value && selectedUser.value && String(selectedUser.value.id) === String(myId)) {
+  if (false && !useQueueSystem.value && selectedUser.value && String(selectedUser.value.id) === String(myId)) {
     errorMsg.value = "No puedes enviarte el documento a ti mismo.";
     return;
   }
@@ -422,29 +484,22 @@ async function submitDocument() {
   try {
     submitting.value = true;
     const pdfBase64 = await fileToBase64(selectedFile.value);
-    const nombreLogico = selectedFile.value.name.replace(/\.pdf$/i, "");
+    const nombreLogico = String(selectedFile.value.name || '').replace(/\.pdf$/i, '');
 
-    if (useQueueSystem.value) {
+    if (true) {
       // Sistema de colas
       const result = await documentStore.createQueueWithParticipants({
         nombrePDF: nombreLogico,
         pdfData: pdfBase64,
         firmantes: selectedSigners.value.map(s => s.id)
       });
+      void result;
 
-      successMessage = "Cola de firma creada exitosamente";
+      successMessage.value = "Cola de firma creada exitosamente";
       success("Cola de firma creada exitosamente");
 
     } else {
-      // Sistema simple tradicional
-      await DocumentService.upload({
-        nombrePDF: nombreLogico,
-        destinatarioID: selectedUser.value.id,
-        pdfBase64
-      });
-
-      successMessage = "Documento enviado correctamente";
-      success("Documento enviado correctamente");
+      void nombreLogico;
     }
 
     uploadSuccess.value = true;
@@ -467,7 +522,7 @@ async function submitDocument() {
 // Inicialización
 onMounted(() => {
   // Si el sistema de colas está habilitado y es el predeterminado, usarlo
-  if (queueSystemEnabled.value && documentStore.ui?.currentView === 'queue') {
+  if (queueSystemEnabled.value && canUseMultiSigners.value) {
     useQueueSystem.value = true;
   }
 });

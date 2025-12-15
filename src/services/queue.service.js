@@ -161,7 +161,7 @@ export class QueueService {
       const response = await integrationService.makeRequest({
         method: 'GET',
         url: QUEUE_ENDPOINTS.QUEUE_DASHBOARD
-      }, QUEUE_ENDPOINTS.QUEUE_DASHBOARD, true); // Usar cache para dashboard
+      }, QUEUE_ENDPOINTS.QUEUE_DASHBOARD); // Cache ya se maneja en el store
 
       // Estructura transformada por integrationService:
       // {

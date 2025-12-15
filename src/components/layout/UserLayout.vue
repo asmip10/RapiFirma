@@ -66,7 +66,7 @@ function goToChangePassword() {
       v-if="requiresPasswordChange"
       class="bg-yellow-50 border-b border-yellow-200 px-4 py-3"
     >
-      <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="max-w-screen-2xl mx-auto flex items-center justify-between">
         <div class="flex items-center">
           <svg class="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -85,7 +85,7 @@ function goToChangePassword() {
     </div>
 
     <header class="sticky top-0 z-40 w-full bg-slate-800 text-white">
-      <div class="mx-auto max-w-7xl h-14 px-4 flex items-center justify-between">
+      <div class="mx-auto max-w-screen-2xl h-14 px-4 flex items-center justify-between">
         <span class="font-semibold truncate">Bienvenido {{ displayName }}</span>
 
         <div class="flex items-center gap-3 whitespace-nowrap">
@@ -137,7 +137,7 @@ function goToChangePassword() {
       Renovando sesión...
     </div>
 
-    <main class="mx-auto max-w-7xl w-full p-4">
+    <main class="mx-auto max-w-screen-2xl w-full p-4">
       <router-view />
     </main>
   </div>

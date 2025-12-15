@@ -104,16 +104,19 @@ export function sanitizeInput(input, options = {}) {
  */
 export function sanitizeFilename(filename) {
   if (!filename || typeof filename !== 'string') {
-    return 'documento.pdf';
+    return 'documento';
   }
 
+  // Remover extension .pdf (no se guarda en BD)
+  const withoutExt = filename.trim().replace(/\.pdf$/i, '');
+
   // Remover caracteres peligrosos y mantener solo seguros
-  const sanitized = filename
+  const sanitized = withoutExt
     .replace(/[<>:"/\\|?*]/g, '_') // Reemplazar caracteres peligrosos
     .replace(/\s+/g, '_') // Reemplazar espacios con guiones bajos
     .substring(0, 255); // Limitar longitud
 
-  return sanitized.endsWith('.pdf') ? sanitized : `${sanitized}.pdf`;
+  return sanitized || 'documento';
 }
 
 /**
@@ -238,6 +241,13 @@ export function validatePDFBase64(base64String) {
     // Limpiar string de prefijos data: si existen
     const cleanBase64 = base64String.replace(/^data:application\/pdf;base64,/, '');
 
+    const decodeBase64Safe = (b64) => {
+      const normalized = String(b64 ?? '').replace(/\s+/g, '');
+      const padLen = normalized.length % 4;
+      const padded = padLen ? normalized + '='.repeat(4 - padLen) : normalized;
+      return atob(padded);
+    };
+
     // VALIDACIÓN 1: Base64 válido
     const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
     if (!base64Regex.test(cleanBase64)) {
@@ -254,7 +264,7 @@ export function validatePDFBase64(base64String) {
     }
 
     // VALIDACIÓN 3: Header PDF válido (primeros bytes)
-    const headerBytes = atob(cleanBase64.substring(0, 100));
+    const headerBytes = decodeBase64Safe(cleanBase64.substring(0, 128));
     if (!headerBytes.startsWith('%PDF-')) {
       return { valid: false, error: 'Archivo no es PDF válido (falta header)' };
     }
@@ -283,8 +293,8 @@ export function validatePDFBase64(base64String) {
     ];
 
     // Validar contra patrones peligrosos (primeros 5KB)
-    const sampleSize = Math.min(5000, cleanBase64.length);
-    const sampleData = atob(cleanBase64.substring(0, sampleSize * 4 / 3));
+    const sampleChars = Math.min(8192, cleanBase64.length);
+    const sampleData = decodeBase64Safe(cleanBase64.substring(0, sampleChars));
 
     for (const pattern of dangerousPatterns) {
       if (pattern.test(sampleData)) {
@@ -297,7 +307,20 @@ export function validatePDFBase64(base64String) {
     }
 
     // VALIDACIÓN 6: Estructura PDF básica
-    const hasEOF = sampleData.includes('%%EOF');
+    // NOTE: El marcador %%EOF suele estar al final del PDF, no al inicio.
+    const tailChars = Math.min(cleanBase64.length, 16384);
+    let base64Tail = cleanBase64.substring(cleanBase64.length - tailChars);
+    // Asegurar longitud válida para atob (múltiplo de 4)
+    if (base64Tail.length % 4) base64Tail += '='.repeat(4 - (base64Tail.length % 4));
+
+    let tailData = '';
+    try {
+      tailData = decodeBase64Safe(base64Tail);
+    } catch {
+      tailData = '';
+    }
+
+    const hasEOF = tailData.includes('%%EOF');
     if (!hasEOF && estimatedSize > 1000) { // Solo para PDFs más grandes
       return { valid: false, error: 'PDF sin marcador de fin válido' };
     }

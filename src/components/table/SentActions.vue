@@ -20,6 +20,18 @@
 
     <!-- Botón Descargar -->
     <button
+      @click="$emit('preview', props.document)"
+      class="relative group p-1.5 text-gray-600 rounded-lg hover:bg-gray-100 transition-all duration-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+    >
+      <EyeIcon class="w-4 h-4" />
+      <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <div class="rounded-md bg-gray-900 text-white text-[11px] font-medium px-2 py-1 whitespace-nowrap shadow">
+          Ver
+        </div>
+      </div>
+    </button>
+
+    <button
       @click="$emit('download', props.document)"
       class="relative group p-1.5 text-gray-600 rounded-lg hover:bg-gray-100 transition-all duration-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
     >
@@ -149,6 +161,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { EyeIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
   document: {
@@ -157,20 +170,14 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['add-users', 'download', 'delete', 'view-details', 'cancel', 'copy-link', 'rename', 'duplicate', 'history', 'export']);
+const emit = defineEmits(['add-users', 'preview', 'download', 'delete', 'view-details', 'cancel', 'copy-link', 'rename', 'duplicate', 'history', 'export']);
 
 const showMoreMenu = ref(false);
 
 const canAddUsers = computed(() => {
-  const actions = props.document.actions || [];
-  const canAddByActions =
-    actions.includes('addUsers') ||
-    actions.includes('add-users') ||
-    actions.includes('add_users');
-
-  const canAddByFlag = props.document.allowDynamicAddition === true;
-
-  return (canAddByActions || canAddByFlag) && props.document.status === 'InProgress';
+  if (props.document.status !== 'InProgress') return false;
+  if (!props.document.queueId) return false;
+  return true;
 });
 
 const canCancel = computed(() => {

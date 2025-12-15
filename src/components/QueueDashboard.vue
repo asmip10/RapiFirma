@@ -248,7 +248,7 @@
                     :document="doc"
                     @sign="handleSign"
                     @download="handleDownload"
-                    @hide="handleHide"
+                    @remove-from-view="handleRemoveFromView"
                     @view-details="handleViewDetails"
                   />
                 </td>
@@ -357,6 +357,7 @@
                     :document="doc"
                     @add-users="handleAddUsers"
                     @delete="handleDeleteSent"
+                    @preview="handlePreview"
                     @download="handleDownload"
                   />
                 </td>
@@ -667,7 +668,8 @@ async function handleDownload(queue) {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = queue.documentName || `documento_${queue.queueId}.pdf`;
+    const baseName = queue.documentName || `documento_${queue.queueId}`;
+    a.download = /\.pdf$/i.test(baseName) ? baseName : `${baseName}.pdf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -680,6 +682,32 @@ async function handleDownload(queue) {
   }
 }
 
+async function handlePreview(queue) {
+  try {
+    const blob = await queueStore.downloadDocument(queue.documentId, queue.queueId);
+    const pdfBlob = blob?.type ? blob : new Blob([blob], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(pdfBlob);
+
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      // Fallback si el navegador bloquea popups
+      const a = document.createElement('a');
+      a.href = url;
+      const baseName = queue.documentName || `documento_${queue.queueId}`;
+      a.download = /\.pdf$/i.test(baseName) ? baseName : `${baseName}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      success('Preview bloqueado, descargado en su lugar');
+    }
+
+    setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  } catch (err) {
+    console.error('Error previsualizando documento:', err);
+    error('No se pudo abrir el documento');
+  }
+}
+
 async function handleHide(queue) {
   try {
     await queueStore.hideQueueFromView(queue.queueId);
@@ -688,6 +716,20 @@ async function handleHide(queue) {
   } catch (err) {
     console.error('Error ocultando cola:', err);
     error('No se pudo ocultar la cola');
+  }
+}
+
+async function handleRemoveFromView(queue) {
+  if (!queue?.queueId) return;
+  if (!confirm('Eliminar este documento de tu vista?')) return;
+
+  try {
+    await queueStore.hideQueueFromView(queue.queueId);
+    success('Documento eliminado de tu vista');
+    loadDashboard();
+  } catch (err) {
+    console.error('Error eliminando de la vista:', err);
+    error('No se pudo eliminar de tu vista');
   }
 }
 

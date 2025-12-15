@@ -30,12 +30,12 @@
     <!-- Botón Ver detalles -->
     <!-- Botón Ocultar -->
     <button
-      v-if="canHide"
-      @click="$emit('hide', props.document)"
+      v-if="canRemoveFromView"
+      @click="$emit('remove-from-view', props.document)"
       class="p-1.5 text-gray-600 rounded-lg hover:bg-gray-100 transition-all duration-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-      title="Ocultar"
+      title="Eliminar de mi vista"
     >
-      <EyeSlashIcon class="w-4 h-4" />
+      <TrashIcon class="w-4 h-4" />
     </button>
 
     <!-- Menú de más acciones -->
@@ -101,7 +101,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { ArrowDownTrayIcon, EyeSlashIcon, PencilSquareIcon } from '@heroicons/vue/24/outline';
+import { ArrowDownTrayIcon, PencilSquareIcon, TrashIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
   document: {
@@ -110,7 +110,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['sign', 'download', 'hide', 'view-details', 'share', 'print', 'report']);
+const emit = defineEmits(['sign', 'download', 'remove-from-view', 'view-details', 'share', 'print', 'report']);
 
 const showMoreMenu = ref(false);
 
@@ -118,8 +118,15 @@ const canSign = computed(() => {
   return props.document.userStatus?.status === 'Current' || props.document.userStatus?.status === 'myTurn';
 });
 
-const canHide = computed(() => {
-  return props.document.actions?.includes('hide');
+const canRemoveFromView = computed(() => {
+  const actions = props.document.actions || [];
+  return (
+    !!props.document.queueId ||
+    actions.includes('hide') ||
+    actions.includes('hideFromView') ||
+    actions.includes('hide-from-view') ||
+    actions.includes('hide_from_view')
+  );
 });
 
 const canShare = computed(() => {
