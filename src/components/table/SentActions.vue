@@ -1,54 +1,59 @@
 <template>
-  <div class="flex items-center space-x-1">
+  <div class="flex items-center gap-2">
     <!-- Botón Agregar participantes -->
     <button
       v-if="canAddUsers"
-      @click="$emit('add-users')"
-      class="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-all duration-200 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+      @click="$emit('add-users', props.document)"
+      class="relative group p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-all duration-200 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
       title="Agregar más participantes"
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
       </svg>
-      <span>Agregar</span>
+      <span class="sr-only">Agregar</span>
+      <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <div class="rounded-md bg-gray-900 text-white text-[11px] font-medium px-2 py-1 whitespace-nowrap shadow">
+          Anadir usuarios
+        </div>
+      </div>
     </button>
 
     <!-- Botón Descargar -->
     <button
-      @click="$emit('download')"
-      class="p-1.5 text-gray-600 rounded-lg hover:bg-gray-100 transition-all duration-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-      title="Descargar documento"
+      @click="$emit('download', props.document)"
+      class="relative group p-1.5 text-gray-600 rounded-lg hover:bg-gray-100 transition-all duration-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
       </svg>
+      <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <div class="rounded-md bg-gray-900 text-white text-[11px] font-medium px-2 py-1 whitespace-nowrap shadow">
+          Descargar
+        </div>
+      </div>
     </button>
 
     <!-- Botón Ver detalles -->
-    <button
-      @click="$emit('view-details')"
-      class="p-1.5 text-gray-600 rounded-lg hover:bg-gray-100 transition-all duration-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-      title="Ver detalles y progreso"
-    >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-    </button>
+
 
     <!-- Botón Cancelar (solo si no está completado) -->
     <button
-      v-if="canCancel"
-      @click="handleCancel"
-      class="p-1.5 text-red-600 rounded-lg hover:bg-red-50 transition-all duration-200 focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-      title="Cancelar cola"
+      v-if="canDelete"
+      @click="handleDelete"
+      class="relative group p-1.5 text-red-600 rounded-lg hover:bg-red-50 transition-all duration-200 focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
       </svg>
+      <div class="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <div class="rounded-md bg-gray-900 text-white text-[11px] font-medium px-2 py-1 whitespace-nowrap shadow">
+          Eliminar documento
+        </div>
+      </div>
     </button>
 
     <!-- Menú de más acciones -->
-    <div class="relative">
+    <div v-if="false" class="relative">
       <button
         @click="showMoreMenu = !showMoreMenu"
         class="p-1.5 text-gray-600 rounded-lg hover:bg-gray-100 transition-all duration-200"
@@ -152,14 +157,20 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['add-users', 'download', 'view-details', 'cancel', 'copy-link', 'rename', 'duplicate', 'history', 'export']);
+const emit = defineEmits(['add-users', 'download', 'delete', 'view-details', 'cancel', 'copy-link', 'rename', 'duplicate', 'history', 'export']);
 
 const showMoreMenu = ref(false);
 
 const canAddUsers = computed(() => {
-  return props.document.allowDynamicAddition &&
-         props.document.actions?.includes('addUsers') &&
-         props.document.status === 'InProgress';
+  const actions = props.document.actions || [];
+  const canAddByActions =
+    actions.includes('addUsers') ||
+    actions.includes('add-users') ||
+    actions.includes('add_users');
+
+  const canAddByFlag = props.document.allowDynamicAddition === true;
+
+  return (canAddByActions || canAddByFlag) && props.document.status === 'InProgress';
 });
 
 const canCancel = computed(() => {
@@ -167,6 +178,12 @@ const canCancel = computed(() => {
          props.document.status !== 'Completed' &&
          props.document.status !== 'Cancelled';
 });
+
+const canDelete = computed(() => canCancel.value);
+
+function handleDelete() {
+  emit('delete', props.document);
+}
 
 const canRename = computed(() => {
   return props.document.status === 'InProgress';

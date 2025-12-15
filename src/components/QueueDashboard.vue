@@ -324,10 +324,10 @@
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Documento</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creado</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progreso</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firmantes</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creado</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
@@ -335,7 +335,9 @@
               <tr v-for="doc in paginatedSentDocuments" :key="doc.documentId" class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="text-sm font-medium text-gray-900">{{ doc.documentName }}</div>
-                  <div class="text-xs text-gray-500">ID: {{ doc.documentId }}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {{ formatDate(doc.createdAt) }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <ProgressBar
@@ -350,16 +352,12 @@
                 <td class="px-6 py-4 whitespace-nowrap">
                   <SentStatusBadge :status="doc.status" :display="doc.statusDisplay" />
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {{ formatDate(doc.createdAt) }}
-                </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm">
                   <SentActions
                     :document="doc"
                     @add-users="handleAddUsers"
-                    @cancel="handleCancel"
+                    @delete="handleDeleteSent"
                     @download="handleDownload"
-                    @view-details="handleViewDetails"
                   />
                 </td>
               </tr>
@@ -451,7 +449,7 @@ import QueueDetailsModal from './QueueDetailsModal.vue';
 import ReceivedStatusBadge from './table/ReceivedStatusBadge.vue';
 import SentStatusBadge from './table/SentStatusBadge.vue';
 import ProgressBar from './table/ProgressBar.vue';
-import SignersCell from './table/SignersCell.vue';
+import SignersCell from './table/SignersDropdownCell.vue';
 import ExpirationCell from './table/ExpirationCell.vue';
 import ReceivedActions from './table/ReceivedActions.vue';
 import SentActions from './table/SentActions.vue';
@@ -714,6 +712,20 @@ async function handleCancel(queue) {
 function handleViewDetails(queue) {
   currentDetailsQueue.value = queue;
   showDetailsModal.value = true;
+}
+
+async function handleDeleteSent(queue) {
+  if (!queue?.queueId) return;
+  if (confirm(`¿Estás seguro de eliminar la cola "${queue.documentName}"?`)) {
+    try {
+      await queueStore.cancelQueue(queue.queueId);
+      success('Documento eliminado');
+      loadDashboard();
+    } catch (err) {
+      console.error('Error eliminando cola:', err);
+      error('No se pudo eliminar el documento');
+    }
+  }
 }
 
 // Lifecycle con cleanup automático
