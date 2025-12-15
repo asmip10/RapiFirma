@@ -8,13 +8,14 @@
         <div class="metric-card bg-white p-4 rounded-lg border-l-4 border-red-500">
           <div class="flex items-center justify-between">
             <div>
-              <h3 class="text-lg font-semibold text-red-700 flex items-center">
-                🔥 Mi Turno
+              <h3 class="text-lg font-semibold text-red-700 flex items-center gap-2">
+                <ExclamationTriangleIcon class="w-5 h-5 text-red-600" />
+                <span>Mi Turno</span>
               </h3>
-              <div class="text-3xl font-bold text-red-600">{{ queueStore.queueMetrics.myTurnCount }}</div>
+              <div class="text-3xl font-bold text-red-600">{{ myTurnCount }}</div>
               <p class="text-sm text-gray-600">Firmar ahora</p>
             </div>
-            <div v-if="queueStore.queueMetrics.myTurnCount > 0" class="bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-medium">
+            <div v-if="myTurnCount > 0" class="bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-medium">
               Urgente
             </div>
           </div>
@@ -24,11 +25,12 @@
         <div class="metric-card bg-white p-4 rounded-lg border-l-4 border-orange-500">
           <div class="flex items-center justify-between">
             <div>
-              <h3 class="text-lg font-semibold text-orange-700 flex items-center">
-                ⏳ En Progreso
+              <h3 class="text-lg font-semibold text-orange-700 flex items-center gap-2">
+                <ClockIcon class="w-5 h-5 text-orange-600" />
+                <span>En Progreso</span>
               </h3>
               <div class="text-3xl font-bold text-orange-600">
-                {{ queueStore.queues.signingQueues.length }}
+                {{ inProgressCount }}
               </div>
               <p class="text-sm text-gray-600">Firmando</p>
             </div>
@@ -39,10 +41,11 @@
         <div class="metric-card bg-white p-4 rounded-lg border-l-4 border-green-500">
           <div class="flex items-center justify-between">
             <div>
-              <h3 class="text-lg font-semibold text-green-700 flex items-center">
-                ✅ Completados
+              <h3 class="text-lg font-semibold text-green-700 flex items-center gap-2">
+                <CheckCircleIcon class="w-5 h-5 text-green-600" />
+                <span>Completados</span>
               </h3>
-              <div class="text-3xl font-bold text-green-600">{{ queueStore.queueMetrics.completedCount }}</div>
+              <div class="text-3xl font-bold text-green-600">{{ completedCount }}</div>
               <p class="text-sm text-gray-600">Finalizados</p>
             </div>
           </div>
@@ -52,11 +55,12 @@
         <div class="metric-card bg-white p-4 rounded-lg border-l-4 border-blue-500">
           <div class="flex items-center justify-between">
             <div>
-              <h3 class="text-lg font-semibold text-blue-700 flex items-center">
-                📄 Total
+              <h3 class="text-lg font-semibold text-blue-700 flex items-center gap-2">
+                <DocumentTextIcon class="w-5 h-5 text-blue-600" />
+                <span>Total</span>
               </h3>
               <div class="text-3xl font-bold text-blue-600">
-                {{ (queueStore.queues.signingQueues.length + queueStore.queueMetrics.completedCount) }}
+                {{ totalCount }}
               </div>
               <p class="text-sm text-gray-600">Documentos</p>
             </div>
@@ -72,8 +76,9 @@
           <svg class="w-6 h-6 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0 9 9 0 11-2 0 9-9 0 012-2z" clip-rule="evenodd" />
           </svg>
-          <h2 class="text-xl font-semibold text-red-700">
-            🔥 Mi Turno - Firmar Ahora
+          <h2 class="text-xl font-semibold text-red-700 flex items-center gap-2">
+            <ExclamationTriangleIcon class="w-6 h-6 text-red-600" />
+            <span>Mi Turno - Firmar Ahora</span>
           </h2>
         </div>
         <span class="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
@@ -431,7 +436,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { InboxIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline';
+  import { CheckCircleIcon, ClockIcon, DocumentTextIcon, ExclamationTriangleIcon, InboxIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline';
 import { useDocumentsStore } from '../stores/document';
 import { useToasts } from '../composables/useToasts';
 import {
@@ -460,6 +465,28 @@ const emit = defineEmits(['view-change']);
 
 const queueStore = useDocumentsStore();
 const { success, error } = useToasts();
+
+// Métricas: basadas en endpoints /sent y /received (no en queue-dashboard)
+const receivedMyTurnCount = computed(() => Number(queueStore.receivedSections?.myTurn?.count ?? 0));
+const receivedWaitingCount = computed(() => Number(queueStore.receivedSections?.waiting?.count ?? 0));
+const receivedCompletedCount = computed(() => Number(queueStore.receivedSections?.completed?.count ?? 0));
+
+const sentInProgressCount = computed(() =>
+  Array.isArray(queueStore.sent)
+    ? queueStore.sent.filter(d => d?.status === 'InProgress').length
+    : 0
+);
+
+const sentCompletedCount = computed(() =>
+  Array.isArray(queueStore.sent)
+    ? queueStore.sent.filter(d => d?.status === 'Completed').length
+    : 0
+);
+
+const myTurnCount = computed(() => receivedMyTurnCount.value);
+const inProgressCount = computed(() => receivedWaitingCount.value + sentInProgressCount.value);
+const completedCount = computed(() => receivedCompletedCount.value + sentCompletedCount.value);
+const totalCount = computed(() => inProgressCount.value + completedCount.value);
 
 // ID único para tracking de resources
 const componentId = generateComponentId('QueueDashboard');

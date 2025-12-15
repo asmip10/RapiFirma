@@ -897,10 +897,7 @@ export const useDocumentsStore = defineStore("documents", {
         completedCount: 0,
         totalCount: 0
       };
-    }
-  },
-
-  helpers: {
+    },
     /**
      * Mapea items de colas desde API a formato consistente
      * @param {Array} queues - Array de colas del API
@@ -961,6 +958,7 @@ export const useDocumentsStore = defineStore("documents", {
       this.queueMetrics.waitingCount = this.queues.waitingQueues.length;
       this.queueMetrics.completedCount = this.queues.completedQueues.length;
       this.queueMetrics.hiddenCount = this.queues.hiddenQueues.length;
+      this.queueMetrics.totalCount = this.queues.createdQueues.length + this.queues.signingQueues.length;
     }
   },
 
