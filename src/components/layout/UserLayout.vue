@@ -104,8 +104,13 @@ function goToChangePassword() {
       </div>
     </div>
 
-    <header class="sticky top-0 z-40 w-full bg-slate-200/95 backdrop-blur border-b border-slate-300 shadow-md">
-      <div class="mx-auto max-w-screen-2xl h-16 px-4 flex items-center justify-between gap-4">
+    <header class="sticky top-0 z-40 w-full">
+      <div class="relative">
+        <!-- Glass / blurred background -->
+        <div class="absolute inset-0 bg-white/65 backdrop-blur-xl border-b border-slate-200 shadow-lg"></div>
+        <div class="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-sky-500/10 to-purple-500/10"></div>
+
+        <div class="relative mx-auto max-w-screen-2xl h-16 px-4 flex items-center justify-between gap-4">
         <div class="flex items-center gap-3 min-w-0">
           <div class="h-9 w-9 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-semibold">
             {{ initials }}
@@ -152,6 +157,7 @@ function goToChangePassword() {
             {{ auth.isRefreshing ? 'Cerrando...' : 'Cerrar sesión' }}
           </button>
         </div>
+      </div>
       </div>
     </header>
 
