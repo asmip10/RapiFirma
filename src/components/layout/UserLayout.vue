@@ -1,22 +1,28 @@
 <script setup>
 import { computed, onMounted } from "vue";
+import { ArrowRightOnRectangleIcon, Cog6ToothIcon } from "@heroicons/vue/24/outline";
 import { useAuthStore } from "../../stores/auth";
 import { useRouter } from "vue-router";
 import { useDisplayName } from "../../composables/useDisplayName";
-import { useToasts } from "../../composables/useToasts";
 
 const auth = useAuthStore();
 const router = useRouter();
 const { displayName, resolve } = useDisplayName();
-const { info } = useToasts();
 
 onMounted(() => {
   auth.loadFromStorage();
   resolve();
 });
 
-const username = computed(() => auth.user?.username || "usuario");
 const isAdmin = computed(() => auth.user?.role === "Admin");
+
+const initials = computed(() => {
+  const name = String(displayName.value ?? "").trim();
+  if (!name) return "U";
+  const parts = name.split(/\s+/).filter(Boolean);
+  const letters = parts.slice(0, 2).map(p => p[0]?.toUpperCase()).filter(Boolean);
+  return (letters.join("") || name[0]?.toUpperCase() || "U").slice(0, 2);
+});
 
 // Estado del token para debugging (solo en desarrollo)
 const tokenStatus = computed(() => {
@@ -29,8 +35,22 @@ const tokenStatus = computed(() => {
 // Mostrar advertencia de cambio de contraseña forzado
 const requiresPasswordChange = computed(() => auth.requiresPasswordChange);
 
+const tokenStatusText = computed(() => {
+  if (auth.isRefreshing) return "Renovando...";
+  if (auth.shouldRefresh) return "Expira pronto";
+  if (auth.isTokenExpired) return "Expirado";
+  return "Válido";
+});
+
 // 🚨 FIX: computed property para import.meta.env.DEV
 const isDev = computed(() => import.meta.env.DEV);
+
+const tokenBadgeText = computed(() => {
+  if (auth.isRefreshing) return "Renovando...";
+  if (auth.shouldRefresh) return "Expira pronto";
+  if (auth.isTokenExpired) return "Expirado";
+  return "Valido";
+});
 
 // Tiempo restante del token en formato legible
 const tokenTimeRemaining = computed(() => {
@@ -84,24 +104,32 @@ function goToChangePassword() {
       </div>
     </div>
 
-    <header class="sticky top-0 z-40 w-full bg-slate-800 text-white">
-      <div class="mx-auto max-w-screen-2xl h-14 px-4 flex items-center justify-between">
-        <span class="font-semibold truncate">Bienvenido {{ displayName }}</span>
+    <header class="sticky top-0 z-40 w-full bg-slate-200/95 backdrop-blur border-b border-slate-300 shadow-md">
+      <div class="mx-auto max-w-screen-2xl h-16 px-4 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="h-9 w-9 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-semibold">
+            {{ initials }}
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs text-gray-500">Bienvenido</div>
+            <div class="text-sm font-semibold text-gray-900 truncate">{{ displayName }}</div>
+          </div>
+        </div>
 
         <div class="flex items-center gap-3 whitespace-nowrap">
           <!-- Status del token (solo en desarrollo) -->
           <span
             v-if="isDev"
-            class="text-xs bg-gray-700 px-2 py-1 rounded"
-            :title="`Token: ${tokenStatus} - ${tokenTimeRemaining || 'N/A'}`"
+            class="text-xs text-gray-700 bg-gray-100 border border-gray-200 px-2 py-1 rounded-md"
+            :title="`Token: ${tokenBadgeText} - ${tokenTimeRemaining || 'N/A'}`"
           >
-            {{ tokenStatus }}
+            {{ tokenBadgeText }}
           </span>
 
           <!-- Tiempo restante (si hay token con expiración) -->
           <span
             v-if="tokenTimeRemaining && !isDev"
-            class="text-xs bg-gray-700 px-2 py-1 rounded"
+            class="text-xs text-gray-700 bg-gray-100 border border-gray-200 px-2 py-1 rounded-md"
           >
             {{ tokenTimeRemaining }}
           </span>
@@ -109,16 +137,18 @@ function goToChangePassword() {
           <router-link
             v-if="isAdmin"
             to="/admin"
-            class="bg-white/10 px-3 py-1 rounded hover:bg-white/20 text-sm"
+            class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-800 bg-gray-100 hover:bg-gray-200 transition-colors"
           >
-            Ir a Admin
+            <Cog6ToothIcon class="w-5 h-5 text-gray-600" />
+            <span>Admin</span>
           </router-link>
 
           <button
             @click="logout"
             :disabled="auth.isRefreshing"
-            class="bg-red-600 hover:bg-red-700 disabled:bg-red-800 px-4 py-2 rounded text-sm disabled:opacity-50"
+            class="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-red-800 px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-colors"
           >
+            <ArrowRightOnRectangleIcon class="w-5 h-5" />
             {{ auth.isRefreshing ? 'Cerrando...' : 'Cerrar sesión' }}
           </button>
         </div>

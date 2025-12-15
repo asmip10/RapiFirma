@@ -30,16 +30,21 @@ export const UserService = {
     try {
       const { data } = await api.get("/api/users/me");
       if (!data) return null;
-      const id = data.id ?? data.Id ?? null;
+
+      // Soportar respuestas con envelope { success, data }
+      if (data?.success === false) return null;
+      const payload = data?.data ?? data;
+
+      const id = payload.id ?? payload.Id ?? null;
       const fullName =
-        data.fullName ?? data.FullName ??
-        `${data.nombres ?? data.Nombres ?? ""} ${data.apellidos ?? data.Apellidos ?? ""}`.trim();
+        payload.nombreCompleto ?? payload.fullName ?? payload.FullName ??
+        `${payload.nombres ?? payload.Nombres ?? ""} ${payload.apellidos ?? payload.Apellidos ?? ""}`.trim();
       return {
         id,
         fullName: fullName || null,
-        nombres: data.nombres ?? data.Nombres ?? null,
-        apellidos: data.apellidos ?? data.Apellidos ?? null,
-        cargo: data.cargo ?? data.Cargo ?? null,
+        nombres: payload.nombres ?? payload.Nombres ?? null,
+        apellidos: payload.apellidos ?? payload.Apellidos ?? null,
+        cargo: payload.cargo ?? payload.Cargo ?? null,
       };
     } catch (e) {
       if (e?.response?.status === 404 || e?.response?.status === 401) return null;
