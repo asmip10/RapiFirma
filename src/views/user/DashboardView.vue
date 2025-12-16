@@ -16,7 +16,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useDocumentsStore } from '../../stores/document';
 import { useToasts } from '../../composables/useToasts';
 
@@ -30,9 +30,6 @@ const { success } = useToasts();
 // Estado local
 const showUploadModal = ref(false);
 
-// Computadas del sistema de colas
-const shouldShowQueueView = computed(() => documentStore.shouldShowQueueView);
-
 // Métodos del sistema de colas
 function handleViewChange(view) {
   console.log('View change:', view);
@@ -42,15 +39,8 @@ function handleUploadSuccess() {
   success('Documento creado exitosamente');
   showUploadModal.value = false;
 
-  // Refrescar el dashboard actual
-  if (currentView.value === 'queue') {
-    // Refrescar dashboard de colas
-    documentStore.fetchQueueDashboard();
-  } else {
-    // Refrescar dashboard legacy
-    documentStore.fetchReceived();
-    documentStore.fetchSent();
-  }
+  // Refrescar dashboard de colas
+  documentStore.fetchQueueDashboard();
 }
 
 // Exponer método para abrir el modal de creación
@@ -60,16 +50,7 @@ function openUploadModal() {
 
 // Cargar datos iniciales
 onMounted(async () => {
-  // Si el usuario tiene vista predeterminada de colas, cargar datos de colas
-  if (currentView.value === 'queue') {
-    await documentStore.fetchQueueDashboard();
-  } else {
-    // Cargar datos del sistema tradicional
-    await Promise.all([
-      documentStore.fetchReceived(),
-      documentStore.fetchSent()
-    ]);
-  }
+  await documentStore.fetchQueueDashboard();
 });
 
 // Exponer para que otros componentes puedan llamarlo

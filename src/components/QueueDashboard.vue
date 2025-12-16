@@ -431,6 +431,96 @@
       :queue="currentDetailsQueue"
       @close="showDetailsModal = false"
     />
+
+    <!-- Modal: Agregar usuarios a cola (simple) -->
+    <transition name="fade">
+      <div
+        v-if="showAddUserModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      >
+        <div class="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-emerald-200 p-6">
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <h3 class="text-xl font-semibold text-emerald-800">Agregar usuarios a la cola</h3>
+              <p class="text-sm text-slate-600 mt-1">
+                Busca por nombre, DNI o usuario y selecciona. Solo disponible en progreso.
+              </p>
+            </div>
+            <button
+              type="button"
+              class="text-slate-500 hover:text-slate-700"
+              @click="showAddUserModal = false"
+              :disabled="addUserLoading"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div class="space-y-3">
+            <label class="block text-sm font-semibold text-slate-800">Buscar usuarios</label>
+            <input
+              v-model="addUserQuery"
+              type="text"
+              class="w-full rounded-xl border border-emerald-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/40 px-4 py-3 text-slate-900 placeholder-slate-400"
+              placeholder="Ej: Jeremy, 66666666"
+              :disabled="addUserLoading"
+              @input="searchAddUsers"
+            />
+            <div v-if="addUserSearching" class="text-sm text-slate-500">Buscando...</div>
+            <div v-if="addUserResults.length" class="max-h-48 overflow-y-auto border border-slate-100 rounded-xl">
+              <button
+                v-for="user in addUserResults"
+                :key="user.id"
+                type="button"
+                class="w-full px-4 py-2 text-left flex items-center justify-between hover:bg-emerald-50 transition"
+                @click="toggleSelectUser(user.id)"
+              >
+                <div>
+                  <div class="font-medium text-slate-800">{{ user.fullName || user.username || user.dni }}</div>
+                  <div class="text-xs text-slate-500">ID: {{ user.id }} — DNI: {{ user.dni || 'N/D' }}</div>
+                </div>
+                <div
+                  :class="[
+                    'w-4 h-4 rounded-full border',
+                    addUserSelected.includes(user.id) ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300'
+                  ]"
+                ></div>
+              </button>
+            </div>
+            <div v-if="addUserSelected.length" class="flex flex-wrap gap-2 pt-1">
+              <span
+                v-for="id in addUserSelected"
+                :key="id"
+                class="inline-flex items-center bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full"
+              >
+                ID {{ id }}
+                <button class="ml-2 text-emerald-700 hover:text-emerald-900" @click="toggleSelectUser(id)">✕</button>
+              </span>
+            </div>
+            <p v-if="addUserError" class="text-sm text-red-600">{{ addUserError }}</p>
+          </div>
+
+          <div class="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              class="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+              @click="showAddUserModal = false"
+              :disabled="addUserLoading"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-60"
+              @click="confirmAddUsers"
+              :disabled="addUserLoading"
+            >
+              {{ addUserLoading ? 'Agregando...' : 'Agregar' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -446,6 +536,7 @@ import {
   debounce,
   throttle
 } from '../utils/performance';
+import { UserService } from '../services/user.service';
 import QueueCard from './QueueCard.vue';
 import UploadModalHybrid from './UploadModalHybrid.vue';
 import SigningModal from './SigningModal.vue';
@@ -496,10 +587,19 @@ const activeTable = ref('received'); // 'received' | 'sent'
 const showCreateModal = ref(false);
 const showSigningModal = ref(false);
 const showDetailsModal = ref(false);
+const showAddUserModal = ref(false);
 
 // Estado para operaciones
 const currentSigningQueue = ref(null);
 const currentDetailsQueue = ref(null);
+const addUserQueue = ref(null);
+const addUserInput = ref(''); // deprecated (text IDs), mantenemos para no romper pero no se usa
+const addUserQuery = ref('');
+const addUserResults = ref([]);
+const addUserSelected = ref([]);
+const addUserError = ref('');
+const addUserLoading = ref(false);
+const addUserSearching = ref(false);
 
 // Filtros
 const receivedFilters = ref({
@@ -755,8 +855,71 @@ async function handleRemoveFromView(queue) {
 }
 
 function handleAddUsers(queue) {
-  currentDetailsQueue.value = queue;
-  showDetailsModal.value = true;
+  addUserQueue.value = queue;
+  addUserInput.value = '';
+  addUserQuery.value = '';
+  addUserResults.value = [];
+  addUserSelected.value = [];
+  addUserError.value = '';
+  showAddUserModal.value = true;
+}
+
+async function confirmAddUsers() {
+  if (!addUserQueue.value?.queueId) return;
+  addUserError.value = '';
+
+  const ids = addUserSelected.value.filter(id => Number.isInteger(id) && id > 0);
+  if (ids.length === 0) {
+    addUserError.value = 'Selecciona al menos un usuario.';
+    return;
+  }
+
+  addUserLoading.value = true;
+  try {
+    await queueStore.addParticipantsToQueue(addUserQueue.value.queueId, ids);
+    success('Usuarios agregados a la cola');
+    showAddUserModal.value = false;
+    addUserQueue.value = null;
+    addUserInput.value = '';
+    addUserQuery.value = '';
+    addUserResults.value = [];
+    addUserSelected.value = [];
+    loadDashboard();
+  } catch (err) {
+    console.error('Error agregando usuarios:', err);
+    addUserError.value = err.message || 'No se pudo agregar usuarios.';
+  } finally {
+    addUserLoading.value = false;
+  }
+}
+
+const searchAddUsers = debounce(async () => {
+  const q = addUserQuery.value.trim();
+  addUserError.value = '';
+  if (q.length < 2) {
+    addUserResults.value = [];
+    return;
+  }
+  addUserSearching.value = true;
+  try {
+    addUserResults.value = await UserService.search(q, { limit: 10 });
+  } catch (err) {
+    console.error('Error buscando usuarios:', err);
+    addUserError.value = 'No se pudo buscar usuarios.';
+    addUserResults.value = [];
+  } finally {
+    addUserSearching.value = false;
+  }
+}, 300);
+
+function toggleSelectUser(userId) {
+  if (!userId) return;
+  const idx = addUserSelected.value.indexOf(userId);
+  if (idx >= 0) {
+    addUserSelected.value.splice(idx, 1);
+  } else {
+    addUserSelected.value.push(userId);
+  }
 }
 
 async function handleCancel(queue) {
