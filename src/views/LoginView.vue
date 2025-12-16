@@ -44,11 +44,20 @@
                 </div>
                 <input
                   v-model="password"
-                  type="password"
-                  class="w-full pl-12 pr-4 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50/50 focus:bg-white transition-all duration-200 placeholder-gray-400 group-hover:border-blue-300"
+                  :type="showPassword ? 'text' : 'password'"
+                  class="w-full pl-12 pr-12 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50/50 focus:bg-white transition-all duration-200 placeholder-gray-400 group-hover:border-blue-300"
                   placeholder="Ingrese su contraseña"
                   required
                 />
+                <button
+                  type="button"
+                  class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-600 transition-colors duration-200"
+                  :aria-label="showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'"
+                  @mousedown.prevent
+                  @click="showPassword = !showPassword"
+                >
+                  <component :is="showPassword ? EyeSlashIcon : EyeIcon" class="h-5 w-5" />
+                </button>
               </div>
             </div>
           </div>
@@ -96,6 +105,7 @@
 <script setup>
 import { ref, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
+import { EyeIcon, EyeSlashIcon } from "@heroicons/vue/24/outline";
 import { useAuthStore } from "../stores/auth";
 import { useToasts } from "../composables/useToasts";
 import { isFeatureEnabled } from "@/config/featureFlags";
@@ -107,6 +117,7 @@ const { success, warning } = useToasts();
 
 const username = ref("");
 const password = ref("");
+const showPassword = ref(false);
 const loading = ref(false);
 const error = ref("");
 
