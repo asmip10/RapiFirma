@@ -1,6 +1,16 @@
 <!-- src/views/LoginView.vue -->
 <template>
   <div class="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 flex items-center justify-center p-4 relative">
+    <!-- Background Image -->
+    <div class="absolute inset-0 pointer-events-none select-none overflow-hidden">
+      <img
+        src="/draaLogin.png"
+        alt=""
+        class="h-full w-full object-cover blur-lg scale-105 opacity-70"
+      />
+      <div class="absolute inset-0 bg-gradient-to-br from-white/55 via-white/35 to-blue-100/45" />
+    </div>
+
     <!-- Enhanced Background Pattern -->
     <div class="absolute inset-0 overflow-hidden">
       <div class="absolute inset-0 bg-grid-blue-200/[0.08] bg-[length:50px_50px]" />
