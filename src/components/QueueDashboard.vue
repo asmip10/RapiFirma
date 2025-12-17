@@ -802,8 +802,8 @@ async function handleDownload(queue) {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+    success('Descarga iniciada');
 
-    success('Documento descargado exitosamente');
   } catch (err) {
     console.error('Error descargando documento:', err);
     error('No se pudo descargar el documento');
