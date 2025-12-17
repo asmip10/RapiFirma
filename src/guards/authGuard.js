@@ -55,7 +55,7 @@ export async function requireAuthAndValidSession(to, from, next) {
     hasToken: !!auth.accessToken,
     hasUser: !!auth.user,
     isExpired: auth.isTokenExpired,
-    hasRefresh: !!auth.refreshToken,
+    hasRefresh: !!auth.hasRefreshCookie,
     to: to.fullPath
   });
 
@@ -65,7 +65,7 @@ export async function requireAuthAndValidSession(to, from, next) {
   }
 
   // Si el token está expirado y no hay refresh token
-  if (auth.isTokenExpired && !auth.refreshToken) {
+  if (auth.isTokenExpired && !auth.hasRefreshCookie) {
     console.warn("[Guard] Token expirado sin refresh → logout");
     await auth.logout();
     return next({ name: "login", query: { r: to.fullPath } });

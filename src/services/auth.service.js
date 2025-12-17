@@ -10,13 +10,15 @@ export const AuthService = {
 
   async refreshToken(refreshToken) {
     // Backend: POST /api/auth/refresh -> { accessToken }
-    const { data } = await api.post("/api/auth/refresh", { refreshToken });
+    const payload = refreshToken ? { refreshToken } : {};
+    const { data } = await api.post("/api/auth/refresh", payload);
     return data;
   },
 
   async logout(refreshToken) {
     // Backend: POST /api/auth/logout -> { message, tokensInvalidated }
-    const { data } = await api.post("/api/auth/logout", { refreshToken });
+    const payload = refreshToken ? { refreshToken } : {};
+    const { data } = await api.post("/api/auth/logout", payload);
     return data;
   },
 

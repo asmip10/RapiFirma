@@ -17,7 +17,8 @@ class ApiClient {
     this.instance = axios.create({
       baseURL: API_CONFIG.BASE_URL,
       timeout: API_CONFIG.TIMEOUT,
-      headers: API_CONFIG.DEFAULT_HEADERS
+      headers: API_CONFIG.DEFAULT_HEADERS,
+      withCredentials: true
     });
 
     this.setupInterceptors();
@@ -41,31 +42,13 @@ class ApiClient {
             try { await auth.refreshPromise; } catch { /* noop */ }
           }
 
-          if (auth.shouldRefresh && !auth.isRefreshing && auth.refreshToken) {
+          if (auth.shouldRefresh && !auth.isRefreshing) {
             try { await auth.refreshAccessToken(); } catch { /* noop */ }
           }
 
           tokenToUse = auth.accessToken || auth.token || null;
         } catch {
           // Pinia puede no estar lista al inicio
-        }
-
-        // Fallback a storage actual (rf_auth)
-        if (!tokenToUse) {
-          const raw = localStorage.getItem('rf_auth');
-          if (raw) {
-            try {
-              const parsed = JSON.parse(raw);
-              tokenToUse = parsed.accessToken || parsed.token || null;
-            } catch {
-              tokenToUse = null;
-            }
-          }
-        }
-
-        // Compatibilidad con claves antiguas
-        if (!tokenToUse) {
-          tokenToUse = localStorage.getItem('authToken');
         }
 
         if (tokenToUse) {
@@ -148,6 +131,7 @@ class ApiClient {
   handleAuthError() {
     // Limpiar token
     localStorage.removeItem('rf_auth');
+    localStorage.removeItem('rf_auth_meta');
     localStorage.removeItem('authToken');
     localStorage.removeItem('refreshToken');
     sessionStorage.removeItem('rf_warn_exp');

@@ -1,10 +1,9 @@
 import { defineStore } from "pinia";
 import { AuthService } from "../services/auth.service";
 import { jwtDecode } from "jwt-decode";
-import { validateAuthData } from "@/utils/authAdapter";
 
 /**
- * ⚠️ ADVERTENCIA DE SEGURIDAD CRÍTICA
+ *  ADVERTENCIA DE SEGURIDAD CRÍTICA
  *
  * VULNERABILIDAD: Tokens JWT almacenados en localStorage
  * RIESGO: Accesibles via ataques XSS
@@ -90,6 +89,7 @@ export const useAuthStore = defineStore("auth", {
     expiresAt: null,
     requiresPasswordChange: false,
     user: null,
+    hasRefreshCookie: false,
     isRefreshing: false,
     refreshPromise: null,
   }),
@@ -98,80 +98,31 @@ export const useAuthStore = defineStore("auth", {
     isAdmin: (s) => s.user?.role === "Admin",
     isTokenExpired: (s) => !s.expiresAt || new Date() > new Date(s.expiresAt),
     shouldRefresh: (s) => {
-      if (!s.expiresAt || !s.refreshToken) return false;
+      if (!s.expiresAt || !s.hasRefreshCookie) return false;
       return new Date(s.expiresAt).getTime() - Date.now() <= 5 * 60 * 1000;
     }
   },
   actions: {
     async loadFromStorage() {
-      const raw = localStorage.getItem("rf_auth");
+      if (this.accessToken && !this.isTokenExpired) return;
+      const raw = localStorage.getItem("rf_auth_meta");
       if (!raw) return;
       try {
-        const validation = validateAuthData(JSON.parse(raw));
-        if (!validation.valid) {
-          console.warn('⚠️ Datos de autenticación inválidos:', validation.errors);
-          await this.logout();
-          return;
-        }
-        const data = validation.data;
-        if (!data) {
-          console.warn('⚠️ Datos de autenticación nulos');
-          await this.logout();
-          return;
-        }
-        this.accessToken = data.accessToken;
-        if (data.refreshToken !== null && data.refreshToken !== undefined) {
-          this.refreshToken = data.refreshToken;
-        }
-        this.expiresAt = normalizeExpiresAt({ expiresAt: data.expiresAt, accessToken: data.accessToken });
-        this.requiresPasswordChange = data.requiresPasswordChange || false;
-        this.user = mapClaims(this.accessToken);
-        if (this.shouldRefresh && !this.isRefreshing && this.refreshToken) {
-          await this.refreshAccessToken();
-        }
+        const meta = JSON.parse(raw);
+        this.hasRefreshCookie = !!meta?.hasRefreshCookie;
+        if (!this.hasRefreshCookie) return;
+        await this.refreshAccessToken();
       } catch (error) {
-        console.error('❌ Error cargando datos de autenticación:', error);
-        await this.logout();
+        console.error("Error cargando sesion:", error);
+        localStorage.removeItem("rf_auth_meta");
+        this.hasRefreshCookie = false;
       }
     },
 
     persist() {
-      /**
-       * ⚠️ MITIGACIÓN DE SEGURIDAD (temporal)
-       *
-       * PROBLEMA: Tokens en localStorage (vulnerables a XSS)
-       * SOLUCIÓN: Mover a backend con cookies httpOnly + Secure
-       *
-       * Mientras tanto:
-       * - Advertencia de seguridad en consola
-       * - Validación de dominio seguro
-       * - Preparación para migración a cookies
-       */
-
-      // ADVERTENCIA para desarrolladores
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('⚠️ SEGURIDAD: Tokens en localStorage - MIGRAR A COOKIES HTTPONLY');
-      }
-
-      // Mitigación: Solo persistir en HTTPS o desarrollo
-      if (typeof window !== 'undefined' &&
-          window.location.protocol !== 'https:' &&
-          process.env.NODE_ENV === 'production') {
-        console.error('❌ SEGURIDAD: No se permite almacenar tokens en HTTP inseguro');
-        throw new Error('Tokens no seguros detectados - usar HTTPS');
-      }
-
-      // Mitigación: No almacenar refresh token (aunque debería estar en httpOnly)
-      const unsafeData = {
-        accessToken: this.accessToken,
-        refreshToken: this.refreshToken,
-        expiresAt: this.expiresAt,
-        requiresPasswordChange: this.requiresPasswordChange,
-        user: this.user
-        // ❌ ELIMINADO: refreshToken (demasiado sensible para localStorage)
-      };
-
-      localStorage.setItem("rf_auth", JSON.stringify(unsafeData));
+      this.hasRefreshCookie = true;
+      const meta = { hasRefreshCookie: true };
+      localStorage.setItem("rf_auth_meta", JSON.stringify(meta));
     },
 
     async login({ username, password }) {
@@ -180,7 +131,7 @@ export const useAuthStore = defineStore("auth", {
         throw new Error('Respuesta de login inválida: falta accessToken');
       }
       this.accessToken = tokens.accessToken;
-      this.refreshToken = tokens.refreshToken;
+      this.refreshToken = null;
       this.expiresAt = normalizeExpiresAt({ expiresAt: tokens.expiresAt, accessToken: tokens.accessToken });
       this.requiresPasswordChange = tokens.requiresPasswordChange || false;
       const mapped = mapClaims(tokens.accessToken);
@@ -194,9 +145,6 @@ export const useAuthStore = defineStore("auth", {
       if (this.isRefreshing && this.refreshPromise) {
         return this.refreshPromise;
       }
-      if (!this.refreshToken) {
-        throw new Error("No refresh token available");
-      }
       this.isRefreshing = true;
       this.refreshPromise = this.performRefresh();
       try {
@@ -205,6 +153,7 @@ export const useAuthStore = defineStore("auth", {
           throw new Error('Token recibido inválido');
         }
         this.accessToken = accessToken;
+        this.user = mapClaims(accessToken);
         const decoded = jwtDecode(accessToken);
         if (!decoded.exp) {
           throw new Error('Token sin expiración');
@@ -220,7 +169,7 @@ export const useAuthStore = defineStore("auth", {
 
     async performRefresh() {
       try {
-        return await AuthService.refreshToken(this.refreshToken);
+        return await AuthService.refreshToken();
       } catch (error) {
         await this.logout();
         throw error;
@@ -228,10 +177,9 @@ export const useAuthStore = defineStore("auth", {
     },
 
     async logout() {
-      const refreshToken = this.refreshToken;
-      if (refreshToken) {
+      if (this.hasRefreshCookie) {
         try {
-          await AuthService.logout(refreshToken);
+          await AuthService.logout();
         } catch (error) {
           console.warn("Error al invalidar tokens en backend:", error);
         }
@@ -241,9 +189,11 @@ export const useAuthStore = defineStore("auth", {
       this.expiresAt = null;
       this.requiresPasswordChange = false;
       this.user = null;
+      this.hasRefreshCookie = false;
       this.isRefreshing = false;
       this.refreshPromise = null;
       localStorage.removeItem("rf_auth");
+      localStorage.removeItem("rf_auth_meta");
       sessionStorage.removeItem("rf_warn_exp");
       for (let i = localStorage.length - 1; i >= 0; i--) {
         const k = localStorage.key(i);
@@ -270,7 +220,8 @@ export const useAuthStore = defineStore("auth", {
         'rollback_flags',
         'rf_refresh_state',
         'rf_migration_data',
-        'rf_warn_exp'
+        'rf_warn_exp',
+        'rf_auth_meta'
       ];
       keysToDelete.forEach(key => localStorage.removeItem(key));
       for (let i = localStorage.length - 1; i >= 0; i--) {

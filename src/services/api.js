@@ -6,6 +6,7 @@ import { useToasts } from "../composables/useToasts";
 const api = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT,
+  withCredentials: true,
 });
 
 api.interceptors.request.use(async (config) => {
@@ -17,7 +18,7 @@ api.interceptors.request.use(async (config) => {
   }
 
   // Verificar si necesito refresh (solo si hay refresh token disponible)
-  if (auth.shouldRefresh && !auth.isRefreshing && auth.refreshToken) {
+  if (auth.shouldRefresh && !auth.isRefreshing) {
     try {
       await auth.refreshAccessToken();
     } catch (error) {
@@ -33,7 +34,7 @@ api.interceptors.request.use(async (config) => {
   }
 
   // Mantener lógica de advertencia para tokens viejos sin refresh
-  if (auth?.user?.exp && !auth.refreshToken) {
+  if (auth?.user?.exp && !auth.hasRefreshCookie) {
     const now = Math.floor(Date.now() / 1000);
     const secs = auth.user.exp - now;
     const warned = sessionStorage.getItem("rf_warn_exp");
@@ -69,7 +70,7 @@ api.interceptors.response.use(
 
       try {
         // Si hay refresh token disponible, intentar refrescar
-        if (auth.refreshToken && !auth.isRefreshing) {
+        if (!auth.isRefreshing) {
           await auth.refreshAccessToken();
 
           // Reintentar request original con nuevo token
