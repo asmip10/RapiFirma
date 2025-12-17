@@ -1,5 +1,5 @@
 <template>
-  <div class="flex items-center gap-2">
+  <div v-if="!isWaiting" class="flex items-center gap-2">
     <!-- Botón principal de firma (si es su turno) -->
     <button
       v-if="canSign"
@@ -12,6 +12,16 @@
       title="Firmar"
     >
       <PencilSquareIcon class="w-4 h-4" />
+    </button>
+
+    <!-- BotІn Ver documento (si es su turno) -->
+    <button
+      v-if="canSign"
+      @click="$emit('preview', props.document)"
+      class="p-1.5 rounded-lg transition-all duration-200 text-gray-600 hover:bg-gray-100 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+      title="Ver documento"
+    >
+      <EyeIcon class="w-4 h-4" />
     </button>
 
     <!-- Botón Descargar (siempre disponible) -->
@@ -101,7 +111,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { ArrowDownTrayIcon, PencilSquareIcon, TrashIcon } from '@heroicons/vue/24/outline';
+import { ArrowDownTrayIcon, EyeIcon, PencilSquareIcon, TrashIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
   document: {
@@ -110,9 +120,14 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['sign', 'download', 'remove-from-view', 'view-details', 'share', 'print', 'report']);
+const emit = defineEmits(['sign', 'preview', 'download', 'remove-from-view', 'view-details', 'share', 'print', 'report']);
 
 const showMoreMenu = ref(false);
+
+const isWaiting = computed(() => {
+  return props.document.userStatus?.status === 'Waiting' ||
+    props.document.userStatus?.status === 'waiting';
+});
 
 const canSign = computed(() => {
   return props.document.userStatus?.status === 'Current' || props.document.userStatus?.status === 'myTurn';

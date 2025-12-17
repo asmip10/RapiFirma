@@ -252,6 +252,7 @@
                   <ReceivedActions
                     :document="doc"
                     @sign="handleSign"
+                    @preview="handlePreview"
                     @download="handleDownload"
                     @remove-from-view="handleRemoveFromView"
                     @view-details="handleViewDetails"
@@ -818,7 +819,7 @@ async function handlePreview(queue) {
     const url = window.URL.createObjectURL(pdfBlob);
 
     const win = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!win) {
+    if (!win && !document.hasFocus()) {
       error('Tu navegador bloqueó la previsualización. Permite popups para abrir el PDF.');
     }
 
