@@ -11,6 +11,12 @@ const api = axios.create({
 
 api.interceptors.request.use(async (config) => {
   const auth = useAuthStore();
+  const url = String(config.url || "").toLowerCase();
+  const isAuthRefresh = url.includes("/api/auth/refresh");
+
+  if (isAuthRefresh) {
+    return config;
+  }
 
   // Si hay un refresh en proceso, esperar
   if (auth.isRefreshing && auth.refreshPromise) {
@@ -34,7 +40,7 @@ api.interceptors.request.use(async (config) => {
   }
 
   // Mantener lógica de advertencia para tokens viejos sin refresh
-  if (auth?.user?.exp && !auth.hasRefreshCookie) {
+  if (auth?.user?.exp && !auth.refreshToken) {
     const now = Math.floor(Date.now() / 1000);
     const secs = auth.user.exp - now;
     const warned = sessionStorage.getItem("rf_warn_exp");
@@ -65,7 +71,9 @@ api.interceptors.response.use(
     const { error: showError } = useToasts();
     const status = err?.response?.status;
 
-    if (status === 401 && !originalRequest._retry) {
+    const isRefreshRequest = String(originalRequest?.url || "").toLowerCase().includes("/api/auth/refresh");
+
+    if (status === 401 && !originalRequest._retry && !isRefreshRequest) {
       originalRequest._retry = true;
 
       try {
@@ -110,3 +118,4 @@ api.interceptors.response.use(
 );
 
 export default api;
+

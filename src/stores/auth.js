@@ -89,7 +89,6 @@ export const useAuthStore = defineStore("auth", {
     expiresAt: null,
     requiresPasswordChange: false,
     user: null,
-    hasRefreshCookie: false,
     isRefreshing: false,
     refreshPromise: null,
   }),
@@ -98,31 +97,49 @@ export const useAuthStore = defineStore("auth", {
     isAdmin: (s) => s.user?.role === "Admin",
     isTokenExpired: (s) => !s.expiresAt || new Date() > new Date(s.expiresAt),
     shouldRefresh: (s) => {
-      if (!s.expiresAt || !s.hasRefreshCookie) return false;
+      if (!s.expiresAt || !s.refreshToken) return false;
       return new Date(s.expiresAt).getTime() - Date.now() <= 5 * 60 * 1000;
     }
   },
   actions: {
     async loadFromStorage() {
       if (this.accessToken && !this.isTokenExpired) return;
-      const raw = localStorage.getItem("rf_auth_meta");
+      const raw = localStorage.getItem("rf_auth");
       if (!raw) return;
       try {
-        const meta = JSON.parse(raw);
-        this.hasRefreshCookie = !!meta?.hasRefreshCookie;
-        if (!this.hasRefreshCookie) return;
-        await this.refreshAccessToken();
+        const data = JSON.parse(raw);
+        this.accessToken = data?.accessToken || null;
+        this.refreshToken = data?.refreshToken || null;
+        this.expiresAt = normalizeExpiresAt({
+          expiresAt: data?.expiresAt,
+          accessToken: data?.accessToken
+        });
+        this.requiresPasswordChange = data?.requiresPasswordChange || false;
+        this.user = data?.user || (this.accessToken ? mapClaims(this.accessToken) : null);
+
+        if (this.isTokenExpired && this.refreshToken) {
+          try {
+            await this.refreshAccessToken();
+          } catch (error) {
+            console.warn("Refresh fallido al restaurar sesiÛn:", error);
+            await this.logout();
+          }
+        }
       } catch (error) {
         console.error("Error cargando sesion:", error);
-        localStorage.removeItem("rf_auth_meta");
-        this.hasRefreshCookie = false;
+        localStorage.removeItem("rf_auth");
       }
     },
 
     persist() {
-      this.hasRefreshCookie = true;
-      const meta = { hasRefreshCookie: true };
-      localStorage.setItem("rf_auth_meta", JSON.stringify(meta));
+      const payload = {
+        accessToken: this.accessToken,
+        refreshToken: this.refreshToken,
+        expiresAt: this.expiresAt,
+        requiresPasswordChange: this.requiresPasswordChange,
+        user: this.user
+      };
+      localStorage.setItem("rf_auth", JSON.stringify(payload));
     },
 
     async login({ username, password }) {
@@ -131,7 +148,7 @@ export const useAuthStore = defineStore("auth", {
         throw new Error('Respuesta de login invÃ¡lida: falta accessToken');
       }
       this.accessToken = tokens.accessToken;
-      this.refreshToken = null;
+      this.refreshToken = tokens.refreshToken || null;
       this.expiresAt = normalizeExpiresAt({ expiresAt: tokens.expiresAt, accessToken: tokens.accessToken });
       this.requiresPasswordChange = tokens.requiresPasswordChange || false;
       const mapped = mapClaims(tokens.accessToken);
@@ -145,20 +162,22 @@ export const useAuthStore = defineStore("auth", {
       if (this.isRefreshing && this.refreshPromise) {
         return this.refreshPromise;
       }
+      if (!this.refreshToken) {
+        throw new Error('No hay refreshToken disponible');
+      }
       this.isRefreshing = true;
       this.refreshPromise = this.performRefresh();
       try {
-        const { accessToken } = await this.refreshPromise;
+        const { accessToken, refreshToken, expiresAt } = await this.refreshPromise;
         if (!accessToken || typeof accessToken !== 'string') {
-          throw new Error('Token recibido invÃ¡lido');
+          throw new Error('Token recibido invÛlido');
         }
         this.accessToken = accessToken;
         this.user = mapClaims(accessToken);
-        const decoded = jwtDecode(accessToken);
-        if (!decoded.exp) {
-          throw new Error('Token sin expiraciÃ³n');
+        this.expiresAt = normalizeExpiresAt({ expiresAt, accessToken });
+        if (refreshToken) {
+          this.refreshToken = refreshToken;
         }
-        this.expiresAt = new Date(decoded.exp * 1000).toISOString();
         this.persist();
         return accessToken;
       } finally {
@@ -169,7 +188,7 @@ export const useAuthStore = defineStore("auth", {
 
     async performRefresh() {
       try {
-        return await AuthService.refreshToken();
+        return await AuthService.refreshToken(this.refreshToken);
       } catch (error) {
         await this.logout();
         throw error;
@@ -177,9 +196,9 @@ export const useAuthStore = defineStore("auth", {
     },
 
     async logout() {
-      if (this.hasRefreshCookie) {
+      if (this.refreshToken) {
         try {
-          await AuthService.logout();
+          await AuthService.logout(this.refreshToken);
         } catch (error) {
           console.warn("Error al invalidar tokens en backend:", error);
         }
@@ -189,11 +208,9 @@ export const useAuthStore = defineStore("auth", {
       this.expiresAt = null;
       this.requiresPasswordChange = false;
       this.user = null;
-      this.hasRefreshCookie = false;
       this.isRefreshing = false;
       this.refreshPromise = null;
       localStorage.removeItem("rf_auth");
-      localStorage.removeItem("rf_auth_meta");
       sessionStorage.removeItem("rf_warn_exp");
       for (let i = localStorage.length - 1; i >= 0; i--) {
         const k = localStorage.key(i);
@@ -221,7 +238,7 @@ export const useAuthStore = defineStore("auth", {
         'rf_refresh_state',
         'rf_migration_data',
         'rf_warn_exp',
-        'rf_auth_meta'
+        'rf_auth'
       ];
       keysToDelete.forEach(key => localStorage.removeItem(key));
       for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -233,3 +250,8 @@ export const useAuthStore = defineStore("auth", {
     }
   },
 });
+
+
+
+
+

@@ -37,8 +37,8 @@ export class QueueService {
       throw new Error('El nombre del PDF es requerido y debe ser un string válido.');
     }
 
-    // Sanitizar nombre de archivo
-    const sanitizedNombrePDF = sanitizeFilename(nombrePDF);
+    // Sanitizar nombre de archivo y remover .pdf si viene en el nombre
+    const sanitizedNombrePDF = sanitizeFilename(nombrePDF).replace(/\.pdf$/i, '');
 
     // Validar PDF base64 con seguridad
     const pdfValidation = validatePDFBase64(pdfData);

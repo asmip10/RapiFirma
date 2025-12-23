@@ -3,11 +3,13 @@
     <div
       v-for="t in toasts"
       :key="t.id"
-      class="rounded-lg shadow px-4 py-3 text-sm text-white flex items-start gap-3"
+      class="toast-item rounded-lg shadow text-white flex items-start gap-3"
       :class="{
         'bg-green-600': t.type === 'success',
         'bg-red-600': t.type === 'error',
-        'bg-slate-800': t.type === 'info'
+        'bg-slate-800': t.type === 'info',
+        'px-4 py-3 text-sm': t.size !== 'lg',
+        'px-5 py-4 text-base': t.size === 'lg'
       }"
       role="status" aria-live="polite"
     >
@@ -25,3 +27,20 @@
 import { useToasts } from "../../composables/useToasts";
 const { toasts, remove } = useToasts();
 </script>
+
+<style scoped>
+.toast-item {
+  animation: toast-in 220ms ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+</style>

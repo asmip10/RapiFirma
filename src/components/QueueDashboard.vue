@@ -527,8 +527,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-  import { CheckCircleIcon, ClockIcon, DocumentTextIcon, ExclamationTriangleIcon, InboxIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline';
+import { CheckCircleIcon, ClockIcon, DocumentTextIcon, ExclamationTriangleIcon, InboxIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline';
 import { useDocumentsStore } from '../stores/document';
+import { useAuthStore } from '../stores/auth';
 import { useToasts } from '../composables/useToasts';
 import {
   createTrackedInterval,
@@ -538,6 +539,7 @@ import {
   throttle
 } from '../utils/performance';
 import { UserService } from '../services/user.service';
+import { bridgeService } from '../services/bridge.service';
 import QueueCard from './QueueCard.vue';
 import UploadModalHybrid from './UploadModalHybrid.vue';
 import SigningModal from './SigningModal.vue';
@@ -556,6 +558,7 @@ import Pagination from './table/Pagination.vue';
 const emit = defineEmits(['view-change']);
 
 const queueStore = useDocumentsStore();
+const authStore = useAuthStore();
 const { success, error } = useToasts();
 
 // Métricas: basadas en endpoints /sent y /received (no en queue-dashboard)
@@ -779,9 +782,127 @@ function handleUploadSuccess() {
   loadDashboard();
 }
 
-function handleSign(queue) {
-  currentSigningQueue.value = queue;
-  showSigningModal.value = true;
+function buildBridgeFileName(queue) {
+  const rawName = queue?.documentName || queue?.document?.nombrePDF || queue?.nombrePDF;
+  const fallback = queue?.documentId ? `documento_${queue.documentId}` : `documento_${queue?.queueId || 'cola'}`;
+  const baseName = (rawName || fallback).trim();
+  return baseName.replace(/\.pdf$/i, '');
+}
+
+function extractBridgeOperationId(response) {
+  return response?.operationId || response?.data?.operationId || null;
+}
+
+function extractBridgeStatus(response) {
+  return response?.status || response?.data?.status || null;
+}
+
+function extractBridgeError(response) {
+  return response?.errorMessage || response?.data?.errorMessage || null;
+}
+
+async function handleSign(queue) {
+  const rawDocumentId = queue?.documentId || queue?.document?.id || queue?.document?.documentId;
+  const documentId = typeof rawDocumentId === 'string' ? Number(rawDocumentId) : rawDocumentId;
+  if (!Number.isInteger(documentId) || documentId <= 0) {
+    error('No se encontro el ID del documento.');
+    return;
+  }
+
+  let accessToken = typeof authStore.accessToken === 'string' ? authStore.accessToken.trim() : '';
+  if (!accessToken || authStore.isTokenExpired) {
+    try {
+      accessToken = await authStore.refreshAccessToken();
+      accessToken = typeof accessToken === 'string' ? accessToken.trim() : '';
+    } catch (refreshError) {
+      console.error('Error refrescando token antes de firmar:', refreshError);
+      error('Sesion no valida. Inicia sesion nuevamente.');
+      return;
+    }
+  }
+
+  const jwtParts = accessToken.split('.');
+  if (jwtParts.length !== 3) {
+    error('Token invalido. Inicia sesion nuevamente.');
+    return;
+  }
+
+  const fileName = buildBridgeFileName(queue);
+
+  try {
+    const startResponse = await bridgeService.startSign({
+      fileName,
+      timeoutMinutes: 15,
+      documentId,
+      accessToken
+    });
+
+    const operationId = extractBridgeOperationId(startResponse);
+    if (!operationId) {
+      throw new Error('No se recibio operationId del bridge.');
+    }
+
+    const timeoutMinutes = startResponse?.timeoutMinutes || 15;
+    const maxDurationMs = (timeoutMinutes * 60 * 1000) + 30000;
+    const startedAt = Date.now();
+    let polling = false;
+
+    success('Firma iniciada. Espera confirmacion del bridge.');
+
+    const intervalId = createTrackedInterval(componentId, async () => {
+      if (polling) return;
+      polling = true;
+
+      try {
+        if (Date.now() - startedAt > maxDurationMs) {
+          clearInterval(intervalId);
+          error('Tiempo de firma agotado.');
+          return;
+        }
+
+        const statusResponse = await bridgeService.getStatus(operationId);
+        const status = extractBridgeStatus(statusResponse);
+
+        if (!status) {
+          polling = false;
+          return;
+        }
+
+        if (status === 'Completed') {
+          clearInterval(intervalId);
+          const signedPdfData =
+            statusResponse?.fileContentBase64 ||
+            statusResponse?.data?.fileContentBase64 ||
+            null;
+
+          if (!signedPdfData) {
+            error('La firma no devolvio el PDF firmado.');
+            return;
+          }
+
+          await queueStore.signCurrentTurn(queue.queueId, signedPdfData);
+          success('Documento firmado correctamente.', { size: 'lg', timeout: 4500 });
+          await loadDashboard();
+          return;
+        }
+
+        if (status === 'Failed' || status === 'Timeout' || status === 'Cancelled') {
+          clearInterval(intervalId);
+          const statusError = extractBridgeError(statusResponse);
+          error(statusError || 'La firma no se completo.');
+        }
+      } catch (err) {
+        clearInterval(intervalId);
+        console.error('Error consultando estado de firma:', err);
+        error('No se pudo completar la firma.');
+      } finally {
+        polling = false;
+      }
+    }, 3000);
+  } catch (err) {
+    console.error('Error iniciando firma con bridge:', err);
+    error('No se pudo iniciar la firma.');
+  }
 }
 
 function handleSignSuccess() {

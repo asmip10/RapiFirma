@@ -1,9 +1,21 @@
 // src/guards/authGuard.js
 import { useAuthStore } from "../stores/auth";
 
+async function safeLoadAuth(auth) {
+  const timeoutMs = 5000;
+  try {
+    await Promise.race([
+      auth.loadFromStorage(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('auth_load_timeout')), timeoutMs))
+    ]);
+  } catch (error) {
+    console.warn("[Guard] loadFromStorage fallo o timeout:", error);
+  }
+}
+
 export async function requireAuth(to, from, next) {
   const auth = useAuthStore();
-  await auth.loadFromStorage();
+  await safeLoadAuth(auth);
 
   if (!auth.isAuthenticated) {
     console.warn("[Guard] Bloqueado: no autenticado →", to.fullPath);
@@ -23,7 +35,7 @@ export async function requireAuth(to, from, next) {
 export function requireRole(roles = []) {
   return async (to, from, next) => {
     const auth = useAuthStore();
-    await auth.loadFromStorage();
+    await safeLoadAuth(auth);
 
     if (!auth.isAuthenticated) {
       console.warn("[Guard] Bloqueado: no autenticado para rol", roles);
@@ -48,14 +60,14 @@ export function requireRole(roles = []) {
 // Nueva guardia combinada para autenticación y sesión válida
 export async function requireAuthAndValidSession(to, from, next) {
   const auth = useAuthStore();
-  await auth.loadFromStorage();
+  await safeLoadAuth(auth);
 
   console.log("[Guard] Estado auth:", {
     isAuthenticated: auth.isAuthenticated,
     hasToken: !!auth.accessToken,
     hasUser: !!auth.user,
     isExpired: auth.isTokenExpired,
-    hasRefresh: !!auth.hasRefreshCookie,
+    hasRefresh: !!auth.refreshToken,
     to: to.fullPath
   });
 
@@ -65,7 +77,7 @@ export async function requireAuthAndValidSession(to, from, next) {
   }
 
   // Si el token está expirado y no hay refresh token
-  if (auth.isTokenExpired && !auth.hasRefreshCookie) {
+  if (auth.isTokenExpired && !auth.refreshToken) {
     console.warn("[Guard] Token expirado sin refresh → logout");
     await auth.logout();
     return next({ name: "login", query: { r: to.fullPath } });
@@ -80,3 +92,4 @@ export async function requireAuthAndValidSession(to, from, next) {
   console.log("[Guard] Acceso permitido a:", to.fullPath);
   next();
 }
+
