@@ -433,6 +433,105 @@
       @close="showDetailsModal = false"
     />
 
+    <!-- Modal: Opciones de firma -->
+    <transition name="fade">
+      <div
+        v-if="showSignOptionsModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      >
+        <div class="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 p-6">
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <h3 class="text-xl font-semibold text-slate-900">Firmar documento</h3>
+              <p class="text-sm text-slate-600 mt-1">
+                Elige firmar con Bridge o subir el PDF firmado manualmente.
+              </p>
+            </div>
+            <button
+              type="button"
+              class="text-slate-500 hover:text-slate-700"
+              @click="showSignOptionsModal = false"
+              :disabled="manualUploading"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div class="space-y-4">
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <h4 class="text-sm font-semibold text-emerald-800">Firmar con Bridge</h4>
+                  <p class="text-xs text-emerald-700 mt-1">Recomendado: firma automática.</p>
+                </div>
+                <button
+                  type="button"
+                  class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700"
+                  @click="showSignOptionsModal = false; startBridgeSign(manualSignQueue)"
+                >
+                  Iniciar Bridge
+                </button>
+              </div>
+            </div>
+
+            <div class="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-4">
+              <div class="flex items-center justify-between gap-3">
+                <h4 class="text-sm font-semibold text-amber-900">Firma manual</h4>
+                <button
+                  type="button"
+                  class="px-4 py-2 rounded-lg border border-amber-500 text-amber-800 text-sm font-semibold hover:bg-amber-100"
+                  @click="showManualPanel = true"
+                  :disabled="manualUploading"
+                >
+                  Iniciar firma manual
+                </button>
+              </div>
+
+              <div v-if="showManualPanel" class="space-y-4">
+                <div>
+                  <label class="block text-sm font-semibold text-slate-800 mb-2">Subir documento</label>
+                  <label
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold cursor-pointer transition-colors"
+                    :class="[
+                      manualFile
+                        ? (isManualFileValid ? 'border-emerald-500 text-emerald-700 bg-emerald-50' : 'border-red-400 text-red-700 bg-red-50')
+                        : 'border-slate-300 text-slate-700 bg-white hover:bg-slate-50'
+                    ]"
+                  >
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      class="sr-only"
+                      @change="handleManualFileChange"
+                      :disabled="manualUploading"
+                    />
+                    Seleccionar archivo
+                  </label>
+                  <span v-if="manualFile" class="ml-3 text-xs text-slate-600">
+                    {{ manualFile.name }}
+                  </span>
+                  <p class="text-xs text-slate-600 mt-3">
+                    Nombre requerido: <strong>{{ manualExpectedFileName }}</strong>
+                  </p>
+                </div>
+                <p v-if="manualError" class="text-sm text-red-600">{{ manualError }}</p>
+                <div class="flex justify-center">
+                  <button
+                    type="button"
+                    class="px-5 py-2.5 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-60"
+                    :disabled="manualUploading || !isManualFileValid"
+                    @click="submitManualSign"
+                  >
+                    {{ manualUploading ? 'Enviando...' : 'Enviar documento firmado' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
     <!-- Modal: Agregar usuarios a cola (simple) -->
     <transition name="fade">
       <div
@@ -592,11 +691,17 @@ const showCreateModal = ref(false);
 const showSigningModal = ref(false);
 const showDetailsModal = ref(false);
 const showAddUserModal = ref(false);
+const showSignOptionsModal = ref(false);
+const showManualPanel = ref(false);
 
 // Estado para operaciones
 const currentSigningQueue = ref(null);
 const currentDetailsQueue = ref(null);
 const addUserQueue = ref(null);
+const manualSignQueue = ref(null);
+const manualFile = ref(null);
+const manualError = ref('');
+const manualUploading = ref(false);
 const addUserInput = ref(''); // deprecated (text IDs), mantenemos para no romper pero no se usa
 const addUserQuery = ref('');
 const addUserResults = ref([]);
@@ -695,6 +800,18 @@ const paginatedSentDocuments = computed(() => {
   const start = (sentPagination.value.page - 1) * sentPagination.value.perPage;
   const end = start + sentPagination.value.perPage;
   return filteredSentDocuments.value.slice(start, end);
+});
+
+const manualExpectedFileName = computed(() => {
+  if (!manualSignQueue.value) return '';
+  const baseName = buildBridgeFileName(manualSignQueue.value);
+  return baseName ? `${baseName}[F].pdf` : '';
+});
+
+const isManualFileValid = computed(() => {
+  if (!manualFile.value || !manualExpectedFileName.value) return false;
+  const fileName = manualFile.value.name || '';
+  return fileName.toLowerCase() === manualExpectedFileName.value.toLowerCase();
 });
 
 // Métodos
@@ -801,7 +918,15 @@ function extractBridgeError(response) {
   return response?.errorMessage || response?.data?.errorMessage || null;
 }
 
-async function handleSign(queue) {
+function handleSign(queue) {
+  manualSignQueue.value = queue;
+  manualFile.value = null;
+  manualError.value = '';
+  showManualPanel.value = false;
+  showSignOptionsModal.value = true;
+}
+
+async function startBridgeSign(queue) {
   const rawDocumentId = queue?.documentId || queue?.document?.id || queue?.document?.documentId;
   const documentId = typeof rawDocumentId === 'string' ? Number(rawDocumentId) : rawDocumentId;
   if (!Number.isInteger(documentId) || documentId <= 0) {
@@ -844,8 +969,9 @@ async function handleSign(queue) {
 
     const timeoutMinutes = startResponse?.timeoutMinutes || 15;
     const maxDurationMs = (timeoutMinutes * 60 * 1000) + 30000;
-    const startedAt = Date.now();
-    let polling = false;
+      const startedAt = Date.now();
+      let polling = false;
+      let notFoundCount = 0;
 
     success('Firma iniciada. Espera confirmacion del bridge.');
 
@@ -890,18 +1016,74 @@ async function handleSign(queue) {
           clearInterval(intervalId);
           const statusError = extractBridgeError(statusResponse);
           error(statusError || 'La firma no se completo.');
+          showSignOptionsModal.value = true;
         }
       } catch (err) {
-        clearInterval(intervalId);
-        console.error('Error consultando estado de firma:', err);
-        error('No se pudo completar la firma.');
+        const responseStatus = err?.response?.status;
+        if (responseStatus === 404 && notFoundCount < 3) {
+          notFoundCount += 1;
+        } else {
+          clearInterval(intervalId);
+          console.error('Error consultando estado de firma:', err);
+          error('No se pudo completar la firma.');
+          showSignOptionsModal.value = true;
+        }
       } finally {
         polling = false;
       }
     }, 3000);
   } catch (err) {
     console.error('Error iniciando firma con bridge:', err);
-    error('No se pudo iniciar la firma.');
+    error('No se pudo iniciar la firma con Bridge.');
+    showSignOptionsModal.value = true;
+  }
+}
+
+function handleManualFileChange(event) {
+  const file = event.target?.files?.[0] || null;
+  manualFile.value = file;
+  manualError.value = '';
+  if (file && !isManualFileValid.value) {
+    manualError.value = `El archivo debe llamarse ${manualExpectedFileName.value}.`;
+  }
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function submitManualSign() {
+  if (!manualSignQueue.value?.queueId) return;
+  manualError.value = '';
+
+  if (!isManualFileValid.value) {
+    manualError.value = `El archivo debe llamarse ${manualExpectedFileName.value}.`;
+    return;
+  }
+
+  manualUploading.value = true;
+  try {
+    const base64 = await readFileAsBase64(manualFile.value);
+    await queueStore.signCurrentTurn(manualSignQueue.value.queueId, base64);
+    success('Documento firmado correctamente.', { size: 'lg', timeout: 4500 });
+    showSignOptionsModal.value = false;
+    manualSignQueue.value = null;
+    manualFile.value = null;
+    await loadDashboard();
+  } catch (err) {
+    console.error('Error enviando firma manual:', err);
+    manualError.value = 'No se pudo enviar el documento firmado.';
+  } finally {
+    manualUploading.value = false;
   }
 }
 
