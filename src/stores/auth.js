@@ -196,9 +196,22 @@ export const useAuthStore = defineStore("auth", {
     },
 
     async logout() {
-      if (this.refreshToken) {
+      let tokenToSend = this.refreshToken;
+      if (!tokenToSend) {
         try {
-          await AuthService.logout(this.refreshToken);
+          const raw = localStorage.getItem("rf_auth");
+          if (raw) {
+            const stored = JSON.parse(raw);
+            tokenToSend = stored?.refreshToken || null;
+          }
+        } catch {
+          tokenToSend = null;
+        }
+      }
+
+      if (tokenToSend) {
+        try {
+          await AuthService.logout(tokenToSend);
         } catch (error) {
           console.warn("Error al invalidar tokens en backend:", error);
         }
@@ -250,6 +263,7 @@ export const useAuthStore = defineStore("auth", {
     }
   },
 });
+
 
 
 
