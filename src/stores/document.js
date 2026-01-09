@@ -628,28 +628,28 @@ export const useDocumentsStore = defineStore("documents", {
 
         // Procesar documentos enviados con datos enriquecidos
         const sentDocs = response?.documents || response?.data?.documents || [];
-        this.sent = sentDocs.map(doc => ({
-          ...doc,
-          // Mantener compatibilidad con formato existente
-          queueId: doc.queueId,
-          documentId: doc.documentId,
-          // Asegurar que existan datos de progreso
-          progress: doc.progress || {
-            totalParticipants: doc.signers?.length || 0,
-            signedCount: doc.signers?.filter(s => s.status === 'Signed')?.length || 0,
-            pendingCount: doc.signers?.filter(s => s.status !== 'Signed')?.length || 0,
-            completionPercentage: 0
-          },
-          // Calcular completionPercentage si no existe
-          ...(doc.progress && !doc.progress.completionPercentage ? {
+        this.sent = sentDocs.map(doc => {
+          const signers = Array.isArray(doc.signers) ? doc.signers : [];
+          const signedCount = signers.filter(s => s.status === 'Signed').length;
+          const totalFromProgress = Number.isFinite(doc.progress?.totalParticipants) ? doc.progress.totalParticipants : 0;
+          const totalParticipants = Math.max(totalFromProgress, signers.length);
+          const pendingCount = Math.max(0, totalParticipants - signedCount);
+          const completionPercentage = totalParticipants > 0
+            ? Math.round((signedCount / totalParticipants) * 100)
+            : 0;
+
+          return {
+            ...doc,
+            queueId: doc.queueId,
+            documentId: doc.documentId,
             progress: {
-              ...doc.progress,
-              completionPercentage: doc.progress.totalParticipants > 0
-                ? Math.round((doc.progress.signedCount / doc.progress.totalParticipants) * 100)
-                : 0
+              totalParticipants,
+              signedCount,
+              pendingCount,
+              completionPercentage
             }
-          } : {})
-        }));
+          };
+        });
 
         console.log(`✅ Cargados ${this.sent.length} documentos enviados`);
         return response;

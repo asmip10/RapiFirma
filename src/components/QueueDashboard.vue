@@ -632,6 +632,7 @@ import { useAuthStore } from '../stores/auth';
 import { useToasts } from '../composables/useToasts';
 import {
   createTrackedInterval,
+  addTrackedEventListener,
   generateComponentId,
   useResourceCleanup,
   debounce,
@@ -684,6 +685,8 @@ const totalCount = computed(() => inProgressCount.value + completedCount.value);
 
 // ID único para tracking de resources
 const componentId = generateComponentId('QueueDashboard');
+const AUTO_REFRESH_MS = 4000;
+const IDLE_PAUSE_MS = 30000;
 
 // Estado principal
 const activeTable = ref('received'); // 'received' | 'sent'
@@ -709,6 +712,7 @@ const addUserSelected = ref([]);
 const addUserError = ref('');
 const addUserLoading = ref(false);
 const addUserSearching = ref(false);
+const lastActivityAt = ref(Date.now());
 
 // Filtros
 const receivedFilters = ref({
@@ -880,7 +884,9 @@ const loadDashboard = debounce(async () => {
     ]);
   } catch (err) {
     console.error('Error cargando dashboard:', err);
-    error('No se pudo cargar el dashboard');
+    if (!authStore.isLoggingOut) {
+      error('No se pudo cargar el dashboard');
+    }
   }
 }, 500);
 
@@ -1246,9 +1252,16 @@ function handleViewDetails(queue) {
 
 async function handleDeleteSent(queue) {
   if (!queue?.queueId) return;
+  const status = String(queue.status || '').toLowerCase();
+  const statusDisplay = String(queue.statusDisplay || '').toLowerCase();
+  const isExpired = status === 'expired' || statusDisplay === 'expirado';
   if (confirm(`¿Estás seguro de eliminar la cola "${queue.documentName}"?`)) {
     try {
-      await queueStore.cancelQueue(queue.queueId);
+      if (isExpired) {
+        await queueStore.hideQueueFromView(queue.queueId);
+      } else {
+        await queueStore.cancelQueue(queue.queueId);
+      }
       success('Documento eliminado');
       loadDashboard();
     } catch (err) {
@@ -1262,6 +1275,21 @@ async function handleDeleteSent(queue) {
 onMounted(async () => {
   // Cargar dashboard al montar
   await loadDashboard();
+
+  const markActivity = () => {
+    lastActivityAt.value = Date.now();
+  };
+  addTrackedEventListener(componentId, window, 'mousemove', markActivity, { passive: true });
+  addTrackedEventListener(componentId, window, 'keydown', markActivity, { passive: true });
+  addTrackedEventListener(componentId, window, 'click', markActivity, { passive: true });
+  addTrackedEventListener(componentId, window, 'focus', markActivity, { passive: true });
+
+  createTrackedInterval(componentId, () => {
+    if (document.hidden || authStore.isLoggingOut) return;
+    const idleMs = Date.now() - lastActivityAt.value;
+    if (idleMs > IDLE_PAUSE_MS) return;
+    loadDashboard();
+  }, AUTO_REFRESH_MS);
 
   // Setup cleanup automático
   useResourceCleanup(componentId);

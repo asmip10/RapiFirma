@@ -24,8 +24,9 @@
       <EyeIcon class="w-4 h-4" />
     </button>
 
-    <!-- Botón Descargar (siempre disponible) -->
+    <!-- Botón Descargar (no en firmado) -->
     <button
+      v-if="canDownload"
       @click="$emit('download', props.document)"
       :class="[
         'p-1.5 rounded-lg transition-all duration-200',
@@ -134,14 +135,27 @@ const canSign = computed(() => {
 });
 
 const canRemoveFromView = computed(() => {
+  const statusRaw = props.document.userStatus?.status || props.document.status || '';
+  const statusDisplay = props.document.userStatus?.statusDisplay || props.document.statusDisplay || '';
+  const status = String(statusRaw).toLowerCase();
+  const display = String(statusDisplay).toLowerCase();
+  const isSigned = status === 'signed' || status === 'completed' || display === 'firmado';
+  const isExpired = status === 'expired' || display === 'expirado';
   const actions = props.document.actions || [];
-  return (
-    !!props.document.queueId ||
-    actions.includes('hide') ||
+  const canHide = actions.includes('hide') ||
     actions.includes('hideFromView') ||
     actions.includes('hide-from-view') ||
-    actions.includes('hide_from_view')
-  );
+    actions.includes('hide_from_view');
+  return (isSigned || isExpired) && (!!props.document.queueId || canHide);
+});
+
+const canDownload = computed(() => {
+  const statusRaw = props.document.userStatus?.status || props.document.status || '';
+  const statusDisplay = props.document.userStatus?.statusDisplay || props.document.statusDisplay || '';
+  const status = String(statusRaw).toLowerCase();
+  const display = String(statusDisplay).toLowerCase();
+  const isSigned = status === 'signed' || status === 'completed' || display === 'firmado';
+  return !isSigned;
 });
 
 const canShare = computed(() => {

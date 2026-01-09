@@ -3,6 +3,7 @@
     <!-- Icono de reloj con animación -->
     <!-- Texto de expiración -->
     <div
+      v-if="hasMainText"
       :class="[
         'text-sm font-medium truncate leading-none',
         isExpired ? 'text-red-600' : isUrgent ? 'text-yellow-600' : 'text-gray-600'
@@ -11,7 +12,7 @@
       {{ remainingTextDisplay }}
     </div>
 
-    <div v-if="showBadge && badgeText" class="mt-2 w-full">
+    <div v-if="showBadge && badgeText" :class="badgeWrapperClass">
       <span :class="[badgeClasses, 'max-w-full truncate']">{{ badgeText }}</span>
     </div>
   </div>
@@ -43,7 +44,7 @@ const isUrgent = computed(() => hoursUntil.value !== null && hoursUntil.value > 
 const isSoon = computed(() => hoursUntil.value !== null && hoursUntil.value > 24 && hoursUntil.value <= 72);
 
 const remainingTextDisplay = computed(() => {
-  if (isExpired.value) return 'Expirado';
+  if (isExpired.value) return '';
   if (hoursUntil.value === null) return 'Sin expiracion';
 
   const totalHours = Math.max(0, Math.floor(hoursUntil.value));
@@ -73,5 +74,11 @@ const badgeClasses = computed(() => {
   if (isUrgent.value) return `${baseClasses} bg-yellow-100 text-yellow-800 animate-pulse`;
   if (isSoon.value) return `${baseClasses} bg-orange-100 text-orange-800`;
   return '';
+});
+
+const hasMainText = computed(() => Boolean(remainingTextDisplay.value));
+
+const badgeWrapperClass = computed(() => {
+  return hasMainText.value ? 'mt-2 w-full' : 'w-full';
 });
 </script>

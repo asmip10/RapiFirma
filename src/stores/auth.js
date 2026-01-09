@@ -1,21 +1,21 @@
-import { defineStore } from "pinia";
+﻿import { defineStore } from "pinia";
 import { AuthService } from "../services/auth.service";
 import { jwtDecode } from "jwt-decode";
 
 /**
- *  ADVERTENCIA DE SEGURIDAD CRÍTICA
+ *  ADVERTENCIA DE SEGURIDAD CRÃTICA
  *
  * VULNERABILIDAD: Tokens JWT almacenados en localStorage
  * RIESGO: Accesibles via ataques XSS
  *
- * SOLUCIÓN RECOMENDADA:
+ * SOLUCIÃ“N RECOMENDADA:
  * - Mover a cookies httpOnly + Secure en backend
  * - Mientras tanto: mitigaciones implementadas abajo
  */
 
 function validateJWTFormat(token) {
   if (!token || typeof token !== 'string') {
-    throw new Error('Token inválido: se espera string');
+    throw new Error('Token invÃ¡lido: se espera string');
   }
 
   const parts = token.split('.');
@@ -24,15 +24,15 @@ function validateJWTFormat(token) {
   }
 
   try {
-    // Validar que las partes sean base64 válidas
+    // Validar que las partes sean base64 vÃ¡lidas
     JSON.parse(atob(parts[1])); // Header y payload deben ser JSON
   } catch (error) {
-    throw new Error('Token JWT con formato inválido');
+    throw new Error('Token JWT con formato invÃ¡lido');
   }
 }
 
 function mapClaims(token) {
-  // Validaciµn del formato JWT deshabilitada: usaba atob (base64) y puede fallar con JWT base64url.
+  // ValidaciÂµn del formato JWT deshabilitada: usaba atob (base64) y puede fallar con JWT base64url.
   // jwtDecode ya valida/parsea el token de forma segura para nuestro uso.
   // validateJWTFormat(token);
   const c = jwtDecode(token) || {};
@@ -89,6 +89,7 @@ export const useAuthStore = defineStore("auth", {
     expiresAt: null,
     requiresPasswordChange: false,
     user: null,
+    isLoggingOut: false,
     isRefreshing: false,
     refreshPromise: null,
   }),
@@ -121,7 +122,7 @@ export const useAuthStore = defineStore("auth", {
           try {
             await this.refreshAccessToken();
           } catch (error) {
-            console.warn("Refresh fallido al restaurar sesi�n:", error);
+            console.warn("Refresh fallido al restaurar sesiÛn:", error);
             await this.logout();
           }
         }
@@ -143,9 +144,10 @@ export const useAuthStore = defineStore("auth", {
     },
 
     async login({ username, password }) {
+      this.isLoggingOut = false;
       const tokens = await AuthService.login({ username, password });
       if (!tokens.accessToken) {
-        throw new Error('Respuesta de login inválida: falta accessToken');
+        throw new Error('Respuesta de login invÃ¡lida: falta accessToken');
       }
       this.accessToken = tokens.accessToken;
       this.refreshToken = tokens.refreshToken || null;
@@ -170,7 +172,7 @@ export const useAuthStore = defineStore("auth", {
       try {
         const { accessToken, refreshToken, expiresAt } = await this.refreshPromise;
         if (!accessToken || typeof accessToken !== 'string') {
-          throw new Error('Token recibido inv�lido');
+          throw new Error('Token recibido invÛlido');
         }
         this.accessToken = accessToken;
         this.user = mapClaims(accessToken);
@@ -196,6 +198,7 @@ export const useAuthStore = defineStore("auth", {
     },
 
     async logout() {
+      this.isLoggingOut = true;
       let tokenToSend = this.refreshToken;
       if (!tokenToSend) {
         try {
@@ -209,13 +212,6 @@ export const useAuthStore = defineStore("auth", {
         }
       }
 
-      if (tokenToSend) {
-        try {
-          await AuthService.logout(tokenToSend);
-        } catch (error) {
-          console.warn("Error al invalidar tokens en backend:", error);
-        }
-      }
       this.accessToken = null;
       this.refreshToken = null;
       this.expiresAt = null;
@@ -232,6 +228,12 @@ export const useAuthStore = defineStore("auth", {
         }
       }
       this.clearAllStorage();
+
+      if (tokenToSend) {
+        AuthService.logout(tokenToSend).catch((error) => {
+          console.warn("Error al invalidar tokens en backend:", error);
+        });
+      }
     },
 
     async changePassword({ currentPassword, newPassword }) {
@@ -263,6 +265,9 @@ export const useAuthStore = defineStore("auth", {
     }
   },
 });
+
+
+
 
 
 

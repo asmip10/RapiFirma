@@ -52,7 +52,6 @@
                   >
                     <div class="min-w-0">
                       <div class="text-sm text-gray-800 truncate">{{ s.userName || 'Usuario' }}</div>
-                      <div v-if="s.signedAt" class="text-xs text-gray-500">{{ formatShortDate(s.signedAt) }}</div>
                     </div>
                     <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-800">OK</span>
                   </div>
@@ -105,7 +104,11 @@ const props = defineProps({
 
 const open = ref(false);
 
-const totalCount = computed(() => (props.total && props.total > 0 ? props.total : props.signers.length));
+const totalCount = computed(() => {
+  const totalFromProps = Number.isFinite(props.total) ? props.total : 0;
+  const signersLen = Array.isArray(props.signers) ? props.signers.length : 0;
+  return Math.max(totalFromProps, signersLen);
+});
 const signedSigners = computed(() => props.signers.filter(s => s?.status === 'Signed'));
 const pendingSigners = computed(() => props.signers.filter(s => s?.status !== 'Signed'));
 const signedCount = computed(() => signedSigners.value.length);

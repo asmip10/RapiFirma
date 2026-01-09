@@ -13,9 +13,14 @@ api.interceptors.request.use(async (config) => {
   const auth = useAuthStore();
   const url = String(config.url || "").toLowerCase();
   const isAuthRefresh = url.includes("/api/auth/refresh");
+  const isAuthLogout = url.includes("/api/auth/logout");
 
-  if (isAuthRefresh) {
+  if (isAuthRefresh || isAuthLogout) {
     return config;
+  }
+
+  if (auth.isLoggingOut) {
+    return Promise.reject(new axios.Cancel("logout_in_progress"));
   }
 
   // Si hay un refresh en proceso, esperar
@@ -72,8 +77,13 @@ api.interceptors.response.use(
     const status = err?.response?.status;
 
     const isRefreshRequest = String(originalRequest?.url || "").toLowerCase().includes("/api/auth/refresh");
+    const isLogoutRequest = String(originalRequest?.url || "").toLowerCase().includes("/api/auth/logout");
 
-    if (status === 401 && !originalRequest._retry && !isRefreshRequest) {
+    if (axios.isCancel(err) || auth.isLoggingOut) {
+      return Promise.reject(err);
+    }
+
+    if (status === 401 && !originalRequest._retry && !isRefreshRequest && !isLogoutRequest) {
       originalRequest._retry = true;
 
       try {
@@ -118,4 +128,8 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+
+
+
 
