@@ -6,3 +6,4 @@ const BRIDGE_CONFIG = {
 
 export default BRIDGE_CONFIG;
 export { BRIDGE_CONFIG };
+

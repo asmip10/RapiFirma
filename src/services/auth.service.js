@@ -22,10 +22,9 @@ export const AuthService = {
     return data;
   },
 
-  async changePassword({ currentPassword, newPassword }) {
+  async changePassword({ newPassword }) {
     // Backend: POST /api/auth/change-password -> { success, message, wasForcedChange, requiresNewLogin }
     const { data } = await api.post("/api/auth/change-password", {
-      currentPassword,
       newPassword
     });
     return data;

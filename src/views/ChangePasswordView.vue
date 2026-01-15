@@ -22,25 +22,6 @@
         </div>
 
         <form @submit.prevent="handleSubmit" class="space-y-6">
-          <!-- Current Password -->
-          <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-3">Contraseña Actual</label>
-            <div class="relative group">
-              <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <svg class="h-5 w-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <input
-                v-model="currentPassword"
-                type="password"
-                required
-                class="w-full pl-12 pr-4 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50/50 focus:bg-white transition-all duration-200 placeholder-gray-400 group-hover:border-blue-300"
-                placeholder="Ingresa tu contraseña actual"
-              />
-            </div>
-          </div>
-
           <!-- New Password -->
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-3">Nueva Contraseña</label>
@@ -52,12 +33,21 @@
               </div>
               <input
                 v-model="newPassword"
-                type="password"
+                :type="showNewPassword ? 'text' : 'password'"
                 required
                 minlength="6"
-                class="w-full pl-12 pr-4 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50/50 focus:bg-white transition-all duration-200 placeholder-gray-400 group-hover:border-blue-300"
+                class="w-full pl-12 pr-12 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50/50 focus:bg-white transition-all duration-200 placeholder-gray-400 group-hover:border-blue-300"
                 placeholder="Ingresa tu nueva contraseña"
               />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-500 transition-colors duration-200"
+                :aria-label="showNewPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+                @mousedown.prevent
+                @click="showNewPassword = !showNewPassword"
+              >
+                <component :is="showNewPassword ? EyeSlashIcon : EyeIcon" class="h-5 w-5" />
+              </button>
             </div>
             <p class="text-xs text-gray-500 mt-2">Mínimo 6 caracteres</p>
           </div>
@@ -73,11 +63,23 @@
               </div>
               <input
                 v-model="confirmPassword"
-                type="password"
+                :type="showConfirmPassword ? 'text' : 'password'"
                 required
-                class="w-full pl-12 pr-4 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50/50 focus:bg-white transition-all duration-200 placeholder-gray-400 group-hover:border-blue-300"
+                class="w-full pl-12 pr-12 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50/50 focus:bg-white transition-all duration-200 placeholder-gray-400 group-hover:border-blue-300"
                 placeholder="Confirma tu nueva contraseña"
               />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-blue-500 transition-colors duration-200"
+                :aria-label="showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+                @mousedown.prevent
+                @click="showConfirmPassword = !showConfirmPassword"
+              >
+                <component :is="showConfirmPassword ? EyeSlashIcon : EyeIcon" class="h-5 w-5" />
+              </button>
+            </div>
+            <div v-if="confirmPassword" class="mt-3 h-1 w-full rounded-full bg-gray-200 overflow-hidden">
+              <div :class="matchBarClass" class="h-full transition-all duration-200"></div>
             </div>
           </div>
 
@@ -135,19 +137,24 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { ref, computed } from "vue";
+import { useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth";
 import { useToasts } from "../composables/useToasts";
+import { EyeIcon, EyeSlashIcon } from "@heroicons/vue/24/outline";
 
 const router = useRouter();
-const route = useRoute();
 const auth = useAuthStore();
-const { success, error } = useToasts();
+const { success } = useToasts();
 
-const currentPassword = ref("");
 const newPassword = ref("");
 const confirmPassword = ref("");
+const showNewPassword = ref(false);
+const showConfirmPassword = ref(false);
+const matchBarClass = computed(() => {
+  if (!confirmPassword.value) return "w-0";
+  return newPassword.value === confirmPassword.value ? "w-full bg-emerald-500" : "w-full bg-red-500";
+});
 const loading = ref(false);
 const errorMessage = ref("");
 const successMessage = ref("");
@@ -160,11 +167,6 @@ function validateForm() {
 
   if (newPassword.value.length < 6) {
     errorMessage.value = "La contraseña debe tener al menos 6 caracteres";
-    return false;
-  }
-
-  if (currentPassword.value === newPassword.value) {
-    errorMessage.value = "La nueva contraseña debe ser diferente a la actual";
     return false;
   }
 
@@ -183,7 +185,6 @@ async function handleSubmit() {
 
   try {
     const result = await auth.changePassword({
-      currentPassword: currentPassword.value,
       newPassword: newPassword.value
     });
 
@@ -192,17 +193,7 @@ async function handleSubmit() {
 
     // Redirigir después de 2 segundos
     setTimeout(() => {
-      if (result.requiresNewLogin) {
-        router.push("/login");
-      } else {
-        // Usar query param 'r' si existe para redirección inteligente
-        const redirect = route.query.r;
-        if (redirect) {
-          router.push(String(redirect));
-        } else {
-          router.push("/");
-        }
-      }
+      router.push("/login");
     }, 2000);
   } catch (err) {
     if (err.response?.status === 400) {

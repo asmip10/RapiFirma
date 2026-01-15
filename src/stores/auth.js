@@ -236,14 +236,9 @@ export const useAuthStore = defineStore("auth", {
       }
     },
 
-    async changePassword({ currentPassword, newPassword }) {
-      const result = await AuthService.changePassword({
-        currentPassword,
-        newPassword
-      });
-      if (result.requiresNewLogin) {
-        await this.logout();
-      }
+    async changePassword({ newPassword }) {
+      const result = await AuthService.changePassword({ newPassword });
+      await this.logout();
       return result;
     },
 
