@@ -1,50 +1,17 @@
-<script setup>
+﻿<script setup>
 import { onMounted, computed } from "vue";
 import { useAuthStore } from "../../stores/auth";
 import { useRouter } from "vue-router";
-import { useToasts } from "../../composables/useToasts";
 
 const auth = useAuthStore();
 const router = useRouter();
-const { info } = useToasts();
 
 onMounted(() => {
   auth.loadFromStorage?.();
 });
 
-const roleText = computed(() => auth?.user?.role ?? "—");
-const tipoText = computed(() => auth?.user?.tipo ?? "—");
-
-// Estado del token para debugging (solo en desarrollo)
-const tokenStatus = computed(() => {
-  if (auth.isRefreshing) return "🔄 Renovando...";
-  if (auth.shouldRefresh) return "⚠️ Expira pronto";
-  if (auth.isTokenExpired) return "❌ Expirado";
-  return "✅ Válido";
-});
-
-// Tiempo restante del token
-const tokenTimeRemaining = computed(() => {
-  if (!auth.expiresAt) return null;
-
-  const now = new Date();
-  const expires = new Date(auth.expiresAt);
-  const diff = expires.getTime() - now.getTime();
-
-  if (diff <= 0) return "Expirado";
-
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-});
-
 // Mostrar advertencia de cambio de contraseña forzado
 const requiresPasswordChange = computed(() => auth.requiresPasswordChange);
-
-// 🚨 FIX: computed property para import.meta.env.DEV
-const isDev = computed(() => import.meta.env.DEV);
 
 async function logout() {
   await auth.logout();
@@ -81,61 +48,39 @@ function goToChangePassword() {
       </div>
     </div>
 
-    <!-- HEADER rígido, sticky, 2 niveles con alturas fijas -->
-    <header class="sticky top-0 z-40 w-full bg-indigo-600 text-white shadow">
-      <div class="mx-auto max-w-7xl px-4">
-        <!-- Barra superior: h-12 fija, sin wrap -->
-        <div class="h-12 flex items-center justify-between gap-3">
-          <h1 class="font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
-            RapiFirma · Admin
-          </h1>
+    <header class="sticky top-0 z-40 w-full">
+      <div class="relative overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900"></div>
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_transparent_55%)]"></div>
+        <div class="relative mx-auto max-w-7xl px-4 py-4">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-white shadow-lg">
+                <span class="text-sm font-semibold">RF</span>
+              </div>
+              <div>
+                <h1 class="text-lg font-semibold text-white">RapiFirma Admin</h1>
+                <p class="text-xs text-white/70">Panel de control de la plataforma</p>
+              </div>
+            </div>
 
-          <!-- nav: sin wrap; si no entra, trunca -->
-          <nav class="flex items-center gap-4 text-sm whitespace-nowrap overflow-hidden">
-            <router-link to="/admin" class="shrink-0 hover:underline">Dashboard</router-link>
-            <router-link to="/admin/users" class="shrink-0 hover:underline">Usuarios</router-link>
-            <router-link to="/admin/docs" class="shrink-0 hover:underline">Documentos</router-link>
+            <nav class="flex items-center gap-3 text-sm">
+              <router-link
+                to="/"
+                class="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-white/90 transition hover:bg-white/10"
+              >
+                Panel Usuario
+              </router-link>
 
-            <!-- Status del token (solo en desarrollo) -->
-            <span
-              v-if="isDev"
-              class="shrink-0 text-xs bg-indigo-700 px-2 py-1 rounded"
-              :title="`Token: ${tokenStatus} - ${tokenTimeRemaining || 'N/A'}`"
-            >
-              {{ tokenStatus }}
-            </span>
-
-            <!-- Tiempo restante -->
-            <span
-              v-if="tokenTimeRemaining && !isDev"
-              class="shrink-0 text-xs bg-indigo-700 px-2 py-1 rounded"
-            >
-              {{ tokenTimeRemaining }}
-            </span>
-
-            <router-link
-              to="/"
-              class="shrink-0 ml-2 bg-white/10 px-3 py-1 rounded hover:bg-white/20"
-            >
-              Panel Usuario
-            </router-link>
-
-            <button
-              @click="logout"
-              :disabled="auth.isRefreshing"
-              class="shrink-0 bg-red-600 hover:bg-red-700 disabled:bg-red-800 px-3 py-1 rounded text-sm disabled:opacity-50"
-            >
-              {{ auth.isRefreshing ? 'Cerrando...' : 'Cerrar' }}
-            </button>
-          </nav>
-        </div>
-
-        <!-- Sub-barra: h-6 fija, sin wrap -->
-        <div class="h-6 flex items-center justify-end text-[11px] leading-none text-indigo-100 whitespace-nowrap overflow-hidden">
-          <span class="truncate">
-            Rol: {{ roleText }} · Tipo: {{ tipoText }}
-            <span v-if="auth.isRefreshing" class="ml-2 text-yellow-300">(Renovando...)</span>
-          </span>
+              <button
+                @click="logout"
+                :disabled="auth.isRefreshing"
+                class="inline-flex items-center rounded-full bg-rose-500/90 px-4 py-2 font-medium text-white transition hover:bg-rose-500 disabled:opacity-50"
+              >
+                {{ auth.isRefreshing ? 'Cerrando...' : 'Cerrar' }}
+              </button>
+            </nav>
+          </div>
         </div>
       </div>
     </header>

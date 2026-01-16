@@ -19,9 +19,7 @@ function buildCreatePayload(dto = {}) {
     nombres: dto.Nombres ?? dto.nombres ?? "",
     apellidos: dto.Apellidos ?? dto.apellidos ?? "",
     cargoId: dto.CargoId ?? dto.cargoId ?? null,
-    rolId: dto.RolId ?? dto.rolId ?? 2,
     tipo: dto.Tipo ?? dto.tipo ?? null,
-    password: dto.Password ?? dto.password ?? "",
   };
 }
 
@@ -57,7 +55,7 @@ export const UserService = {
     if (q.length < 2) return [];
 
     try {
-      const { data } = await api.get("/api/users/search", { params: { q, limit } });
+      const { data } = await api.get("/api/Users/search", { params: { q, limit } });
       const users = data?.data?.users ?? data?.users ?? (Array.isArray(data) ? data : []);
 
       return (Array.isArray(users) ? users : []).map(u => {
@@ -84,9 +82,18 @@ export const UserService = {
     }
   },
 
-  async list({ includeDeleted = false } = {}) {
-    const { data } = await api.get("/api/users/list", { params: { includeDeleted } });
-    return Array.isArray(data) ? data : (data?.items ?? []);
+  async list() {
+    const { data } = await api.get("/api/Users/list");
+    if (!data) return { totalCount: 0, users: [] };
+    if (Array.isArray(data)) return { totalCount: data.length, users: data };
+    return {
+      totalCount: data.totalCount ?? data.total ?? 0,
+      users: data.users ?? data.items ?? []
+    };
+  },
+  async reniec(dni) {
+    const { data } = await api.get("/api/Users/reniec", { params: { dni } });
+    return data;
   },
 
   // 🔧 Fallback si el endpoint by-id no existe
@@ -110,9 +117,21 @@ export const UserService = {
     const { data } = await api.patch(`/api/users/${id}/restore`);
     return data;
   },
+  async resetPassword(userId) {
+    const { data } = await api.post("/api/Users/reset-password", { userId });
+    return data;
+  },
+  async disable(userId) {
+    const { data } = await api.post("/api/Users/disable", { userId });
+    return data;
+  },
+  async restoreUser(userId) {
+    const { data } = await api.post("/api/Users/restore", { userId });
+    return data;
+  },
   async create(dto) {
     const payload = buildCreatePayload(dto);
-    const { data } = await api.post("/api/users", payload);
+    const { data } = await api.post("/api/Users/create", payload);
     return data;
   },
 

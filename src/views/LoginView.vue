@@ -208,7 +208,8 @@ async function onSubmit() {
     if (redirect) {
       await router.replace(String(redirect));
     } else {
-      await router.replace("/");
+      const defaultRoute = auth.user?.role === "Admin" ? "/admin" : "/";
+      await router.replace(defaultRoute);
     }
   } catch (err) {
     // Manejo mejorado de errores

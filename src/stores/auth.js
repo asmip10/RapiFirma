@@ -3,19 +3,19 @@ import { AuthService } from "../services/auth.service";
 import { jwtDecode } from "jwt-decode";
 
 /**
- *  ADVERTENCIA DE SEGURIDAD CRÃTICA
+ *  ADVERTENCIA DE SEGURIDAD CRÍTICA
  *
  * VULNERABILIDAD: Tokens JWT almacenados en localStorage
  * RIESGO: Accesibles via ataques XSS
  *
- * SOLUCIÃ“N RECOMENDADA:
+ * SOLUCIÓN RECOMENDADA:
  * - Mover a cookies httpOnly + Secure en backend
  * - Mientras tanto: mitigaciones implementadas abajo
  */
 
 function validateJWTFormat(token) {
   if (!token || typeof token !== 'string') {
-    throw new Error('Token invÃ¡lido: se espera string');
+    throw new Error('Token inválido: se espera string');
   }
 
   const parts = token.split('.');
@@ -24,15 +24,15 @@ function validateJWTFormat(token) {
   }
 
   try {
-    // Validar que las partes sean base64 vÃ¡lidas
+    // Validar que las partes sean base64 válidas
     JSON.parse(atob(parts[1])); // Header y payload deben ser JSON
   } catch (error) {
-    throw new Error('Token JWT con formato invÃ¡lido');
+    throw new Error('Token JWT con formato inválido');
   }
 }
 
 function mapClaims(token) {
-  // ValidaciÂµn del formato JWT deshabilitada: usaba atob (base64) y puede fallar con JWT base64url.
+  // Validación del formato JWT deshabilitada: usaba atob (base64) y puede fallar con JWT base64url.
   // jwtDecode ya valida/parsea el token de forma segura para nuestro uso.
   // validateJWTFormat(token);
   const c = jwtDecode(token) || {};
@@ -147,7 +147,7 @@ export const useAuthStore = defineStore("auth", {
       this.isLoggingOut = false;
       const tokens = await AuthService.login({ username, password });
       if (!tokens.accessToken) {
-        throw new Error('Respuesta de login invÃ¡lida: falta accessToken');
+        throw new Error('Respuesta de login inválida: falta accessToken');
       }
       this.accessToken = tokens.accessToken;
       this.refreshToken = tokens.refreshToken || null;

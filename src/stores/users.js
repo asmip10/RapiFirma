@@ -12,6 +12,7 @@ function normalize(u) {
   const rolId = u.rolId ?? u.RolId ?? null;
   const rol = u.rol ?? u.Rol ?? (rolId === 1 ? "Admin" : rolId === 2 ? "User" : "");
   const tipo = u.tipo ?? u.Tipo ?? "";
+  const isActive = u.isActive ?? u.IsActive ?? true;
   const isDeleted = Boolean(u.isDeleted ?? u.IsDeleted ?? false);
   return {
     id,
@@ -24,6 +25,7 @@ function normalize(u) {
     rolId,
     rol,
     tipo,
+    isActive,
     isDeleted,
   };
 }
@@ -32,6 +34,7 @@ export const useUsersStore = defineStore("users", {
   state: () => ({
     loading: false,
     items: [],
+    totalCount: 0,
     filters: {
       q: "",
       includeDeleted: false,
@@ -66,18 +69,19 @@ export const useUsersStore = defineStore("users", {
     async fetch() {
       this.loading = true;
       try {
-        const data = await UserService.list({ includeDeleted: this.filters.includeDeleted });
-        this.items = (data ?? []).map(normalize);
+        const data = await UserService.list();
+        this.totalCount = data?.totalCount ?? 0;
+        const users = data?.users ?? [];
+        this.items = (Array.isArray(users) ? users : []).map(normalize);
       } finally {
         this.loading = false;
       }
     },
 
     async create(dto) {
-      // Regla: no se permite crear administradores
-      const roleVal = dto?.RolId ?? dto?.rolId;
-      if (Number(roleVal) === 1) {
-        throw new Error("No se permite crear administradores.");
+      const tipo = dto?.Tipo ?? dto?.tipo;
+      if (!tipo) {
+        throw new Error("Selecciona el tipo de usuario.");
       }
       const created = await UserService.create(dto);
       await this.fetch();
@@ -115,8 +119,22 @@ export const useUsersStore = defineStore("users", {
       if (current && (current.rol === "Admin" || current.rolId === 1)) {
         throw new Error("Los usuarios con rol Admin no se pueden restaurar.");
       }
-      await UserService.restore(id);
+      await UserService.restoreUser(id);
       await this.fetch();
-    },  
+    },
+
+    async resetPassword(id) {
+      await UserService.resetPassword(id);
+    },
+
+    async disable(id) {
+      await UserService.disable(id);
+      await this.fetch();
+    },
+
+    async enable(id) {
+      await UserService.restoreUser(id);
+      await this.fetch();
+    },
   },
 });

@@ -15,6 +15,7 @@ const UserDashboardView = () => import("../views/user/DashboardView.vue");
 
 // ⬇️ NUEVO: lazy views admin
 const AdminDashboardView = () => import("../views/admin/DashboardView.vue");
+const AdminSectionView = () => import("../views/admin/AdminSectionView.vue");
 const UserListView = () => import("../views/admin/UserListView.vue");
 const CreateUserView = () => import("../views/admin/CreateUserView.vue");
 const EditUserView = () => import("../views/admin/EditUserView.vue");
@@ -40,7 +41,8 @@ const router = createRouter({
       component: AdminLayout,
       beforeEnter: [requireAuthAndValidSession, requireRole(["Admin"])],
       children: [
-        { path: "", name: "admin.dashboard", component: () => import("../views/admin/DashboardView.vue") },
+        { path: "", name: "admin.home", component: AdminSectionView },
+        { path: "dashboard", name: "admin.dashboard", component: AdminDashboardView },
         { path: "users", name: "admin.users", component: () => import("../views/admin/UserListView.vue") },
         { path: "users/create", name: "admin.users.create", component: () => import("../views/admin/CreateUserView.vue") },
         { path: "users/:id/edit", name: "admin.users.edit", component: () => import("../views/admin/EditUserView.vue"), props: true },
