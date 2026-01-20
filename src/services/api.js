@@ -71,10 +71,11 @@ api.interceptors.response.use(
   (r) => r,
 
   async (err) => {
-    const auth = useAuthStore();
-    const originalRequest = err.config;
-    const { error: showError } = useToasts();
-    const status = err?.response?.status;
+	    const auth = useAuthStore();
+	    const originalRequest = err.config;
+	    const { error: showError } = useToasts();
+	    const status = err?.response?.status;
+	    const silent = Boolean(originalRequest?.silent);
 
     const isRefreshRequest = String(originalRequest?.url || "").toLowerCase().includes("/api/auth/refresh");
     const isLogoutRequest = String(originalRequest?.url || "").toLowerCase().includes("/api/auth/logout");
@@ -113,12 +114,16 @@ api.interceptors.response.use(
       }
     }
 
-    // Manejo de otros errores (403, 404, network)
-    if (status === 403) {
+	    // Manejo de otros errores (403, 404, network)
+	    if (silent) {
+	      return Promise.reject(err);
+	    }
+
+	    if (status === 403) {
       showError("Sin permiso para realizar esta acción.");
-    } else if (status === 404) {
-      showError("Documento no existe o fue eliminado.");
-    } else if (!err.response) {
+	    } else if (status === 404) {
+	      showError("Recurso no encontrado.");
+	    } else if (!err.response) {
       // Timeout / red
       showError("No se pudo conectar con el servidor.");
     }

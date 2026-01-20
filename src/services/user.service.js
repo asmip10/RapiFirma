@@ -55,7 +55,7 @@ export const UserService = {
     if (q.length < 2) return [];
 
     try {
-      const { data } = await api.get("/api/Users/search", { params: { q, limit } });
+      const { data } = await api.get("/api/Users/search", { params: { q, limit }, silent: true });
       const users = data?.data?.users ?? data?.users ?? (Array.isArray(data) ? data : []);
 
       return (Array.isArray(users) ? users : []).map(u => {
@@ -77,7 +77,8 @@ export const UserService = {
         };
       });
     } catch (e) {
-      if (e?.response?.status === 400) return [];
+      const status = e?.response?.status;
+      if (status === 400 || status === 404) return [];
       throw e;
     }
   },
@@ -92,7 +93,7 @@ export const UserService = {
     };
   },
   async reniec(dni) {
-    const { data } = await api.get("/api/Users/reniec", { params: { dni } });
+    const { data } = await api.get("/api/Users/reniec", { params: { dni }, silent: true });
     return data;
   },
 
