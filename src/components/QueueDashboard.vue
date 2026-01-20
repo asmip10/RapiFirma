@@ -685,8 +685,8 @@ const totalCount = computed(() => inProgressCount.value + completedCount.value);
 
 // ID único para tracking de resources
 const componentId = generateComponentId('QueueDashboard');
-const AUTO_REFRESH_MS = 4000;
-const IDLE_PAUSE_MS = 30000;
+const AUTO_REFRESH_MS = 4500;
+const IDLE_PAUSE_MS = 15000;
 
 // Estado principal
 const activeTable = ref('received'); // 'received' | 'sent'
