@@ -1,15 +1,15 @@
-// src/services/api.js
 import axios from "axios";
 import { API_CONFIG } from "../config/api.config";
 import { useAuthStore } from "../stores/auth";
 import { useToasts } from "../composables/useToasts";
+
 const api = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT,
-  withCredentials: true,
+  withCredentials: true
 });
 
-api.interceptors.request.use(async (config) => {
+const requestInterceptor = async (config) => {
   const auth = useAuthStore();
   const url = String(config.url || "").toLowerCase();
   const isAuthRefresh = url.includes("/api/auth/refresh");
@@ -23,115 +23,93 @@ api.interceptors.request.use(async (config) => {
     return Promise.reject(new axios.Cancel("logout_in_progress"));
   }
 
-  // Si hay un refresh en proceso, esperar
-  if (auth.isRefreshing && auth.refreshPromise) {
-    await auth.refreshPromise;
-  }
-
-  // Verificar si necesito refresh (solo si hay refresh token disponible)
   if (auth.shouldRefresh && !auth.isRefreshing) {
     try {
       await auth.refreshAccessToken();
-    } catch (error) {
-      // Refresh falló, el interceptor de response manejará el logout
-      return config;
+    } catch {
+      if (auth.isTokenExpired) {
+        return Promise.reject(new axios.Cancel("Token expirado"));
+      }
     }
   }
 
-  // Inyectar access token (uso accessToken para el nuevo sistema, pero mantengo compatibilidad)
-  const tokenToUse = auth.accessToken || auth.token;
-  if (tokenToUse) {
-    config.headers.Authorization = `Bearer ${tokenToUse}`;
+  if (auth.isRefreshing && auth.refreshPromise) {
+    try {
+      await auth.refreshPromise;
+    } catch {
+      return Promise.reject(new axios.Cancel("Refresh fallo"));
+    }
   }
 
-  // Mantener lógica de advertencia para tokens viejos sin refresh
-  if (auth?.user?.exp && !auth.refreshToken) {
-    const now = Math.floor(Date.now() / 1000);
-    const secs = auth.user.exp - now;
-    const warned = sessionStorage.getItem("rf_warn_exp");
-    if (secs <= 0) {
-      // token ya expiró
-      const { error } = useToasts();
-      error("Tu sesión expiró. Vuelve a iniciar sesión.");
-      auth.logout();
-      const params = new URLSearchParams({ r: location.pathname + location.search });
-      window.location.href = `/login?${params.toString()}`;
-      return Promise.reject(new axios.Cancel("Token expirado"));
-    } else if (secs <= 120 && !warned) {
-      const { info } = useToasts();
-      info("Tu sesión expirará pronto.");
-      sessionStorage.setItem("rf_warn_exp", "1");
-    }
+  const token = auth.accessToken;
+  if (token) {
+    config.headers.Authorization = "Bearer " + token;
   }
 
   return config;
-});
+};
 
-api.interceptors.response.use(
-  (r) => r,
+const responseSuccessInterceptor = (r) => r;
 
-  async (err) => {
-	    const auth = useAuthStore();
-	    const originalRequest = err.config;
-	    const { error: showError } = useToasts();
-	    const status = err?.response?.status;
-	    const silent = Boolean(originalRequest?.silent);
+const responseErrorInterceptor = async (err) => {
+  const auth = useAuthStore();
+  const originalRequest = err.config;
+  const { error: showError } = useToasts();
+  const status = err?.response?.status;
+  const silent = Boolean(originalRequest?.silent);
 
-    const isRefreshRequest = String(originalRequest?.url || "").toLowerCase().includes("/api/auth/refresh");
-    const isLogoutRequest = String(originalRequest?.url || "").toLowerCase().includes("/api/auth/logout");
+  const isRefreshRequest = String(originalRequest?.url || "").toLowerCase().includes("/api/auth/refresh");
+  const isLogoutRequest = String(originalRequest?.url || "").toLowerCase().includes("/api/auth/logout");
 
-    if (axios.isCancel(err) || auth.isLoggingOut) {
-      return Promise.reject(err);
-    }
-
-    if (status === 401 && !originalRequest._retry && !isRefreshRequest && !isLogoutRequest) {
-      originalRequest._retry = true;
-
-      try {
-        // Si hay refresh token disponible, intentar refrescar
-        if (!auth.isRefreshing) {
-          await auth.refreshAccessToken();
-
-          // Reintentar request original con nuevo token
-          const tokenToUse = auth.accessToken || auth.token;
-          originalRequest.headers.Authorization = `Bearer ${tokenToUse}`;
-          return api(originalRequest);
-        } else {
-          // No hay refresh token o ya está en proceso, forzar logout
-          throw err;
-        }
-      } catch (refreshError) {
-        // Refresh falló: logout y redirigir
-        await auth.logout();
-        showError("Tu sesión ha expirado. Por favor inicia sesión nuevamente.");
-
-        if (!location.pathname.startsWith("/login")) {
-          const params = new URLSearchParams({ r: location.pathname + location.search });
-          window.location.href = `/login?${params.toString()}`;
-        }
-
-        return Promise.reject(refreshError);
-      }
-    }
-
-	    // Manejo de otros errores (403, 404, network)
-	    if (silent) {
-	      return Promise.reject(err);
-	    }
-
-	    if (status === 403) {
-      showError("Sin permiso para realizar esta acción.");
-	    } else if (status === 404) {
-	      showError("Recurso no encontrado.");
-	    } else if (!err.response) {
-      // Timeout / red
-      showError("No se pudo conectar con el servidor.");
-    }
-
+  if (axios.isCancel(err) || auth.isLoggingOut) {
     return Promise.reject(err);
   }
-);
+
+  if (status === 401 && !originalRequest._retry && !isRefreshRequest && !isLogoutRequest) {
+    originalRequest._retry = true;
+
+    try {
+      if (auth.isRefreshing && auth.refreshPromise) {
+        try {
+          await auth.refreshPromise();
+        } catch {
+          await auth.logout();
+          showError("Sesion expirada");
+          window.location.href = "/login";
+          return Promise.reject(new Error("Refresh fallo"));
+        }
+      }
+
+      if (!auth.isRefreshing && auth.isTokenExpired) {
+        await auth.refreshAccessToken();
+      }
+
+      originalRequest.headers.Authorization = "Bearer " + auth.accessToken;
+      return api(originalRequest);
+    } catch {
+      await auth.logout();
+      showError("Sesion expirada");
+      window.location.href = "/login";
+      return Promise.reject(err);
+    }
+  }
+
+  if (silent) {
+    return Promise.reject(err);
+  }
+
+  if (status === 403) {
+    showError("Sin permiso");
+  } else if (status === 404) {
+    showError("No encontrado");
+  } else if (!err.response) {
+    showError("Error de conexion");
+  }
+
+  return Promise.reject(err);
+};
+
+api.interceptors.request.use(requestInterceptor);
+api.interceptors.response.use(responseSuccessInterceptor, responseErrorInterceptor);
 
 export default api;
-
-

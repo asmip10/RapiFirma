@@ -625,13 +625,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { CheckCircleIcon, ClockIcon, DocumentTextIcon, ExclamationTriangleIcon, InboxIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline';
 import { useDocumentsStore } from '../stores/document';
 import { useAuthStore } from '../stores/auth';
 import { useToasts } from '../composables/useToasts';
 import {
   createTrackedInterval,
+  createTrackedTimeout,
   addTrackedEventListener,
   generateComponentId,
   useResourceCleanup,
@@ -713,6 +714,10 @@ const addUserError = ref('');
 const addUserLoading = ref(false);
 const addUserSearching = ref(false);
 const lastActivityAt = ref(Date.now());
+
+// Control de polling con timeout recursivo (previene acumulación de callbacks)
+let pollingTimeoutId = null;
+let isPollingActive = false;
 
 // Filtros
 const receivedFilters = ref({
@@ -875,7 +880,12 @@ function handleSentNextPage() {
 }
 
 // Métodos optimizados
-const loadDashboard = debounce(async () => {
+const dashboardLoading = ref(false);
+
+async function loadDashboardNow({ showErrorToast = true } = {}) {
+  if (dashboardLoading.value) return;
+  dashboardLoading.value = true;
+
   try {
     await Promise.all([
       queueStore.fetchQueueDashboard(),
@@ -884,14 +894,18 @@ const loadDashboard = debounce(async () => {
     ]);
   } catch (err) {
     console.error('Error cargando dashboard:', err);
-    if (!authStore.isLoggingOut) {
+    if (showErrorToast && !authStore.isLoggingOut) {
       error('No se pudo cargar el dashboard');
     }
+  } finally {
+    dashboardLoading.value = false;
   }
-}, 500);
+}
+
+const loadDashboard = debounce(() => loadDashboardNow({ showErrorToast: true }), 500);
 
 const refreshDashboard = throttle(async () => {
-  await loadDashboard();
+  await loadDashboardNow({ showErrorToast: true });
   success('Dashboard actualizado');
 }, 1000);
 
@@ -1271,10 +1285,51 @@ async function handleDeleteSent(queue) {
   }
 }
 
+// Sistema de polling con timeout recursivo (previene acumulación de callbacks durante inactividad)
+function startPolling() {
+  if (isPollingActive) return;
+  isPollingActive = true;
+
+  const poll = async () => {
+    // Verificar condiciones de pausa
+    if (document.hidden || authStore.isLoggingOut) {
+      scheduleNextPoll();
+      return;
+    }
+
+    const idleMs = Date.now() - lastActivityAt.value;
+    if (idleMs > IDLE_PAUSE_MS) {
+      scheduleNextPoll();
+      return;
+    }
+
+    // Hacer la llamada (dashboardLoading ya previene solapamiento)
+    loadDashboardNow({ showErrorToast: false });
+
+    scheduleNextPoll();
+  };
+
+  const scheduleNextPoll = () => {
+    if (!isPollingActive) return;
+    pollingTimeoutId = createTrackedTimeout(componentId, poll, AUTO_REFRESH_MS);
+  };
+
+  // Iniciar el primer poll
+  scheduleNextPoll();
+}
+
+function stopPolling() {
+  isPollingActive = false;
+  if (pollingTimeoutId) {
+    clearTimeout(pollingTimeoutId);
+    pollingTimeoutId = null;
+  }
+}
+
 // Lifecycle con cleanup automático
 onMounted(async () => {
   // Cargar dashboard al montar
-  await loadDashboard();
+  await loadDashboardNow({ showErrorToast: true });
 
   const markActivity = () => {
     lastActivityAt.value = Date.now();
@@ -1284,15 +1339,27 @@ onMounted(async () => {
   addTrackedEventListener(componentId, window, 'click', markActivity, { passive: true });
   addTrackedEventListener(componentId, window, 'focus', markActivity, { passive: true });
 
-  createTrackedInterval(componentId, () => {
-    if (document.hidden || authStore.isLoggingOut) return;
-    const idleMs = Date.now() - lastActivityAt.value;
-    if (idleMs > IDLE_PAUSE_MS) return;
-    loadDashboard();
-  }, AUTO_REFRESH_MS);
+  // Detectar cuando la página vuelve de estar oculta para refrescar datos
+  addTrackedEventListener(componentId, document, 'visibilitychange', async () => {
+    if (!document.hidden) {
+      // Resetear actividad y hacer un refresh inmediato
+      lastActivityAt.value = Date.now();
+      if (!dashboardLoading.value) {
+        await loadDashboardNow({ showErrorToast: false });
+      }
+    }
+  }, { passive: true });
+
+  // Iniciar polling con timeout recursivo
+  startPolling();
 
   // Setup cleanup automático
   useResourceCleanup(componentId);
+});
+
+// Cleanup adicional: asegurar que el polling se detiene al desmontar
+onUnmounted(() => {
+  stopPolling();
 });
 
 // Exponer método para que el componente padre pueda refrescar
